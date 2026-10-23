@@ -34,7 +34,8 @@ SUDO(){ echo "$PASS" | sudo -S -p '' bash -c "$*"; }
 
 command -v sudo >/dev/null || die "this system has no sudo - install sudo (or run as root) and re-run"
 askpass(){
-  local tries=0
+  local tries=0 PASS=""
+  ( : </dev/tty ) 2>/dev/null || die "no terminal available for the sudo prompt - run the installer from a logged-in terminal (ssh counts)"
   while [ $tries -lt 3 ]; do
     printf "[installer] sudo password for %s (typed once, invisible as you type): " "$(id -un)" > /dev/tty
     read -rs PASS < /dev/tty
