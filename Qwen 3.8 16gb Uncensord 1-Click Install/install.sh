@@ -27,7 +27,7 @@ LOG="$HOME/install.log"; export TK="$HOME/.turnkey-llm"
 say(){ echo "[installer] $*" | tee -a "$LOG"; }
 die(){ say "STOP: $*"; say "Retry after fixing: re-run the same one-line command."; exit 1; }
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
-mark(){ echo "$1" >> "$STATE"; }
+mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
 
 # ---------- resume plumbing ----------
 SUDO(){ echo "$PASS" | sudo -S -p '' bash -c "$*"; }
