@@ -67,26 +67,35 @@ if ! flock -n 9; then
   trap "kill $TAILPID 2>/dev/null" EXIT INT TERM
   while sleep 2; do grep -qx verify "$STATE" 2>/dev/null && break; done
   kill $TAILPID 2>/dev/null; wait 2>/dev/null
-  [ -f "$STATE" ] && grep -qx verify "$STATE" && { echo; echo "[installer] >>> install COMPLETE - run:  hermes   to talk to her."; sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null; }
+  [ -f "$STATE" ] && grep -qx verify "$STATE" && { echo; echo "[installer] >>> install COMPLETE - run:  endpoint   for connection info."; sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null; }
   exit 0
 fi
 
-MODE_FILE="$HOME/.install-mode"; THINK_FILE="$HOME/.install-think"
+MODE_FILE="$HOME/.install-mode"; THINK_FILE="$HOME/.install-think"; AGENT_FILE="$HOME/.install-agent"
 if [ ! -f "$MODE_FILE" ]; then
   echo; echo "Pick ONE (you can switch any time later with:  llama-mode vision|plain )";
-  echo "  1) vision + 96K context    - she can see images";
+  echo "  1) vision + 96K context    - it can see images";
   echo "  2) no vision + 128K context - deeper text sessions, no images";
   read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
   case "$ans" in 2*) MODE=plain;; *) MODE=vision;; esac
   echo "$MODE" > "$MODE_FILE"
 else MODE=$(cat "$MODE_FILE"); fi
-if [ ! -f "$THINK_FILE" ]; then
-  echo; echo "Thinking level for her hidden scratchpad (switch later: llama-mode --thinking low )";
+if [ ! -f "$AGENT_FILE" ]; then
+  echo; echo "What should sit on top of your new model?";
+  echo "  1) Hermes Agent (chat terminal + tools + memory) - recommended";
+  echo "  2) Raw endpoint only (skip Hermes - use the OpenAI-compatible API directly)";
+  read -rp " [1/2, Enter=1] " aa < /dev/tty || aa=1
+  case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
+  echo "$AGENT" > "$AGENT_FILE"
+else AGENT=$(cat "$AGENT_FILE"); fi
+if [ ! -f "$THINK_FILE" ] && [ "$AGENT" = hermes ]; then
+  echo; echo "Thinking level for the hidden scratchpad (switch later: llama-mode --thinking low )";
   echo "  1) off (fastest)  2) low  3) medium (recommended)  4) high (slowest, deepest)";
   read -rp " [1-4, Enter=3] " t < /dev/tty || t=3
   case "$t" in 1*) TH=none;; 2*) TH=low;; 4*) TH=high;; *) TH=medium;; esac
   echo "$TH" > "$THINK_FILE"
 else TH=$(cat "$THINK_FILE"); fi
+[ "$AGENT" != hermes ] && TH=none
 
 # ---------- STAGE 0: preflight (before ANY big download) ----------
 if ! have preflight; then
@@ -214,7 +223,7 @@ Description=Qwen3.8-27B unc IQ3 ($1)
 After=network.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LIBDIR:$CUDA_LIBS
-ExecStart=$BIN -m $4 $mm --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 127.0.0.1 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k q4_0 --cache-type-v q4_0 -n 8192 --jinja -fa on
+ExecStart=$BIN -m $4 $mm --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k q4_0 --cache-type-v q4_0 -n 8192 --jinja -fa on
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -260,8 +269,8 @@ EOS
   mark serve
 fi
 
-# ---------- STAGE 5: hermes + point it at her ----------
-if ! have hermes; then
+# ---------- STAGE 5: optional agent layer (Hermes) ----------
+if [ "$AGENT" = hermes ] && ! have hermes; then
   export PATH="$HOME/.local/bin:$PATH"
   HR="$(command -v hermes || true)"; [ -n "$HR" ] || HR="$HOME/.local/bin/hermes"
   if [ -x "$HR" ]; then say "hermes present"; else
@@ -286,7 +295,7 @@ fi
 # hermes -z answers with zero prompts after this exists), so `hermes` on the
 # viewer's box goes straight to chat. Non-fatal by design: worst case the
 # wizard appears as tonight, and the values it asks for are already defaults.
-if ! have prefill; then
+if [ "$AGENT" = hermes ] && ! have prefill; then
   USE_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
   if ! grep -q "^custom_providers:" "$HOME/.hermes/config.yaml" 2>/dev/null; then
     say "prefilling hermes first-run state (skips the setup wizard)"
@@ -304,9 +313,32 @@ EOC
   mark prefill
 fi
 
+# ---------- STAGE 5.75: endpoint info command (every mode) ----------
+if ! have endpoint; then
+  cat > "$TK/endpoint" <<EOE
+#!/bin/bash
+IP=\$(hostname -I 2>/dev/null | awk '{print \$1}')
+AL=${ALIAS_P}
+[ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && AL=${ALIAS_V}
+echo "=================================================================="
+echo " YOUR LOCAL MODEL ENDPOINT"
+echo "   base URL : http://\$IP:$PORT/v1        (also: 127.0.0.1 from this box)"
+echo "   model    : \$AL"
+echo "   api key  : none required"
+echo "   try it   :"
+echo "     curl http://\$IP:$PORT/v1/chat/completions -H \"Content-Type: application/json\" \\"
+echo "       -d '{\"model\":\"\$AL\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
+echo "   status   : \$(curl -sf -m 4 http://127.0.0.1:$PORT/health || echo 'server not running - check: systemctl --user status llama-*')"
+echo "=================================================================="
+EOE
+  chmod +x "$TK/endpoint"
+  SUDO "cp $TK/endpoint /usr/local/bin/endpoint" 2>/dev/null || cp "$TK/endpoint" "$HOME/.local/bin/" 2>/dev/null || true
+  mark endpoint
+fi
+
 # ---------- STAGE 6: verify with a real completion ----------
 if ! have verify; then
-  say "warming her up (first read is cold; up to ~2 min on small cards)"
+  say "warming the model up (first read is cold; up to ~2 min on small cards)"
   USE_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
   T=$(date +%s)
   R=$(curl -sf -m 300 "http://127.0.0.1:$PORT/v1/chat/completions" -H 'Content-Type: application/json' \
@@ -316,11 +348,17 @@ if ! have verify; then
   # the answer alone can lie: a CPU-fallback server answers too, just 100x slower.
   # GPU-resident check: card must hold several GB, and the reply must have been quick.
   USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
-  [ "${USED:-0}" -gt 6000 ] || die "she answered but NOT from the GPU (card holds only ${USED:-?} MiB - cublas/cudart problem, see stage 2.5)"
+  [ "${USED:-0}" -gt 6000 ] || die "the model answered but NOT from the GPU (card holds only ${USED:-?} MiB - cublas/cudart problem, see stage 2.5)"
   [ "$DT" -le 120 ] || say "WARN: first reply took ${DT}s - slower than GPU-resident speeds; check nvidia-smi power draw"
-  say "VERIFIED: she answers FROM GPU (${USED} MiB resident) in ${DT}s on port $PORT."; mark verify
+  say "VERIFIED: model answers FROM GPU (${USED} MiB resident) in ${DT}s on port $PORT."; mark verify
 fi
 rm -f "$HOME/.turnkey-llm.incomplete"
 sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null || true
-echo; say "DONE. her name is live at http://127.0.0.1:$PORT/v1 (mode: $MODE, thinking: $TH)."
-say "switch modes: llama-mode vision|plain    check status: install-status    or just run: hermes"
+echo; say "DONE. your model is live on ALL network interfaces (mode: $MODE)."
+SAY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo "  =================================================================="
+echo "   ENDPOINT : http://$SAY_IP:$PORT/v1"
+echo "   MODEL    : $([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")"
+echo "   anytime  : run the command:  endpoint"
+echo "  =================================================================="
+[ "${AGENT:-hermes}" = hermes ] && say "agent ready: run  hermes   to start talking" || say "raw endpoint mode: point any OpenAI-compatible app at the URL above"

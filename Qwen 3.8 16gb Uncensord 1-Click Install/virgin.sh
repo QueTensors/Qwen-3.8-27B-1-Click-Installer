@@ -1,5 +1,5 @@
 #!/bin/bash
-# virgin-ize a demo box: remove llama, hermes, nvidia driver, install state. KEEP ~/models.
+# virgin-ize a demo machine: remove llama, hermes, nvidia driver, install state. KEEP ~/models.
 set -x
 SUDO(){ sudo -p '[virgin] sudo password: ' bash -c "$*"; }
 systemctl --user disable --now llama-vision-96k.service 2>/dev/null

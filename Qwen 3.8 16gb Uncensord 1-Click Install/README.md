@@ -1,43 +1,41 @@
-# Qwen 3.8 27B — 1-Click Uncensored Install for NVIDIA boxes
+# Qwen 3.8 27B — 1-Click Uncensored Local AI for NVIDIA PCs
 
-Turn a plain Ubuntu machine with any NVIDIA GPU (12 GB+) into a fully local, uncensored
-27B assistant in one command. No cloud, no accounts, no data leaves your box.
+**TL;DR — who this is for:** anyone with an Ubuntu machine and an NVIDIA GPU with **12 GB or more of VRAM**. One command installs the driver, a fully local uncensored 27B language model, and (optionally) the Hermes agent on top. No cloud, no accounts, nothing phones home. Your card size decides exactly what you get — see the tables.
 
-## The one-liner
+## What YOU get, by graphics card
+
+### 16 GB cards (e.g. RTX 4060 Ti 16G, 3080-class, 16G laptop GPUs)
+| with the agent (recommended) | raw endpoint (skip the agent) |
+|---|---|
+| Qwen 3.8 27B IQ3_XXS uncensored + MTP drafts, 96K context WITH vision or 128K text-only, ~16-22 t/s steady (bursts 40-70 on code), chat terminal + OpenAI-compatible API at `http://YOUR-IP:1234/v1` | same model/server, API only — the agent row's numbers apply to the engine itself |
+
+### 12 GB cards (e.g. RTX 3060 12G, RTX 2060 12G)
+| with the agent | raw endpoint |
+|---|---|
+| Qwen 3.8 27B IQ2_XS uncensored (same brain, denser compression), **64K context** (the agent's own start-up prompt uses ~30K of it), 11-22 t/s measured depending on card generation — faster than reading speed, no vision | same, and you can dial context up to **96K-112K** (verified) since the agent prompt isn't competing for it; no vision |
+
+### 8 GB cards
+IQ2_XS at 8K — supported, honest but modest; the agent's prompt barely fits. Not the showcase.
+
+## What the install asks you (complete list)
+1. sudo password — validated as you type, stored locally, never leaves the machine
+2. vision or text-only (16 GB cards; Enter takes the default)
+3. agent layer: Hermes or raw endpoint (Enter takes Hermes)
+4. thinking level off/low/medium/high (Enter takes medium)
+One reboot mid-way (driver); the installer resumes on your screen when you log back in.
+
+## The one command
 ```bash
-curl -fsSL https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh | bash
+curl -fsSL "https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh" | bash
 ```
 
-You'll be asked for exactly three things, once each:
-1. your sudo password (validated on the spot)
-2. **Vision mode or text-only** (Enter accepts the default for your card)
-3. **Thinking level** (none / low / medium / high)
+## After install
+- `endpoint` — prints your URL, model name, and a ready-to-paste test command, any time
+- `llama-mode vision|plain` — switch later (16 GB cards) · `install-status` — stage check
+- The server binds **0.0.0.0:1234** (whole LAN can reach it), no API key by default — perfect for a home network, think twice on shared/campus LANs.
 
-Then it installs the GPU driver, downloads the model, serves it on
-`http://127.0.0.1:1234/v1` (OpenAI-compatible), installs [Hermes Agent](https://hermes-agent.nousresearch.com)
-pointed at your local GPU, and verifies with a real completion — from the GPU, with
-memory-residency proof in the banner. One reboot happens mid-way (the driver needs it);
-the install **resumes on your screen at next login**, no typing.
-
-## What you get, per GPU tier (measured, not speculated — see BENCHMARKS.md)
-| Card | Brain | Context | Vision | Feel |
-|---|---|---|---|---|
-| 2×12 GB | IQ3 27B | 64K+ | ✓ | layer-split across cards |
-| 16 GB | IQ3 27B | 96K vision / 128K text | ✓ | the full demo girl |
-| 12 GB | IQ2_XS 27B | 64K | — | outtypes your reading speed |
-| 8 GB | IQ2_XS 27B | 8K | — | works; modest |
+## Benchmarks
+BENCHMARKS.md carries the measured tables behind every claim above (RTX 3060 12G + RTX 2060 12G, full ladders, the 23 MiB-per-1K-context memory formula so you can predict your own card).
 
 ## Files
-- `install.sh` — the whole thing, idempotent: re-run any time, completed stages skip
-- `virgin.sh` — resets a demo box for a clean re-run (keeps `~/models`, wipes everything else)
-- `BENCHMARKS.md` — measured decode/prefill/VRAM tables per card, incl. the 23 MiB-per-1K-context KV law
-
-## Model files (pinned by SHA256 inside the script)
-- Qwen 3.8 27B IQ3_XXS Uncensored (MTP drafts) — HuggingFace: RentedNoodle
-- Vision projector — ISTA-DASLab
-- IQ2_XS (12/8 GB tier) — huihui-ai abliterated build
-
-## Requirements
-Ubuntu 22.04+ (x86_64 or ARM), NVIDIA GPU with ≥8 GB VRAM, ~12 GB free disk,
-internet for the downloads. CPU without AVX2? The script detects it and builds
-from source instead of using the prebuilt binaries.
+install.sh (idempotent — re-run anytime, completed stages skip) · virgin.sh (reset a demo box, keeps downloads) · BENCHMARKS.md
