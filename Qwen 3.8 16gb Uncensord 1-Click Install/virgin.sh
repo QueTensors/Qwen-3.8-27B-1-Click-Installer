@@ -1,7 +1,7 @@
 #!/bin/bash
 # virgin-ize a demo box: remove llama, hermes, nvidia driver, install state. KEEP ~/models.
 set -x
-SUDO(){ echo lois12 | sudo -S -p '' bash -c "$*"; }
+SUDO(){ sudo -p '[virgin] sudo password: ' bash -c "$*"; }
 systemctl --user disable --now llama-vision-96k.service 2>/dev/null
 SUDO "systemctl disable --now llama-vision-96k.service; rm -f /etc/systemd/system/llama-vision-96k.service; systemctl daemon-reload"
 SUDO "apt-get purge -y 'nvidia-*' 'libnvidia-*' 'cuda-*' >/dev/null 2>&1; apt-get autoremove -y >/dev/null 2>&1"
