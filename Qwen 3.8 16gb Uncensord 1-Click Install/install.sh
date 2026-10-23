@@ -157,8 +157,10 @@ if ! have llama; then
   U="https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_REL"
   mkdir -p "$TK"
   say "downloading llama.cpp $LLAMA_REL (cuda $CUDA, $A) ~50MB"
-  curl -fL --retry 3 -o "$TK/llama.tar.gz" "$U/llama-$LLAMA_REL-bin-ubuntu-cuda-$CUDA-$A.tar.gz" || die "llama download failed - re-run the same command"
-  curl -fL --retry 3 -o "$TK/cudart.tar.gz"  "$U/cudart-llama-$LLAMA_REL-bin-ubuntu-cuda-$CUDA-$A.tar.gz" || die "cudart download failed - re-run"
+  dl(){ curl -fL --retry 5 --retry-all-errors -C - --speed-time 60 --speed-limit 1000 -o "$1" "$2" || { rm -f "$1"; die "$(basename "$1") download failed (flaky network?) - just re-run the same command, it resumes"; }; }
+  dl "$TK/llama.tar.gz"  "$U/llama-$LLAMA_REL-bin-ubuntu-cuda-$CUDA-$A.tar.gz"
+  dl "$TK/cudart.tar.gz" "$U/cudart-llama-$LLAMA_REL-bin-ubuntu-cuda-$CUDA-$A.tar.gz"
+  tar -tzf "$TK/llama.tar.gz" >/dev/null 2>&1 || { rm -f "$TK/llama.tar.gz"; die "llama archive corrupt - re-run"; }
   tar -xzf "$TK/llama.tar.gz" -C "$TK" && tar -xzf "$TK/cudart.tar.gz" -C "$TK"
   BIN=$(find "$TK" -name llama-server -type f | head -1); [ -n "$BIN" ] || die "llama-server not found in archive"
   readlink -f "$BIN" > "$TK/bin.path"; ln -sf "$BIN" "$TK/llama-server"
