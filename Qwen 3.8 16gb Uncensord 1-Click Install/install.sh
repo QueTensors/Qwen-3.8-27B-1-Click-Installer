@@ -32,15 +32,18 @@ mark(){ echo "$1" >> "$STATE"; }
 # ---------- resume plumbing ----------
 SUDO(){ echo "$PASS" | sudo -S -p '' bash -c "$*"; }
 
+command -v sudo >/dev/null || die "this system has no sudo - install sudo (or run as root) and re-run"
 askpass(){
   local tries=0
   while [ $tries -lt 3 ]; do
     printf "[installer] sudo password for %s (typed once, invisible as you type): " "$(id -un)" > /dev/tty
     read -rs PASS < /dev/tty
     printf "\r[installer] password accepted? checking...        \n" > /dev/tty
-    if printf '%s' "$PASS" | sudo -S -k -p '' true 2>/dev/null; then
+    ERR=$(printf '%s' "$PASS" | sudo -S -k -p '' true 2>&1 >/dev/null)
+    if [ -z "$ERR" ]; then
       printf '%s' "$PASS" > "$PASSF"; chmod 600 "$PASSF"; printf "[installer] sudo password confirmed, stored 0600 for the reboot resume\n" | tee -a "$LOG"; return 0
     fi
+    case "$ERR" in *"not in the sudoers file"*) die "user $(id -un) cannot use sudo - run the installer from an admin account (or add it to sudoers)";; esac
     printf "[installer] that password did not work - trying again\n" > /dev/tty
     tries=$((tries+1))
   done
