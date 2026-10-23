@@ -341,7 +341,8 @@ fi
 
 # ---------- STAGE 6: verify with a real completion ----------
 if ! have verify; then
-  say "warming the model up (first read is cold; up to ~2 min on small cards)"
+  say "warming the model up (first read is cold; up to ~3 min on small cards)"
+  for i in $(seq 1 36); do curl -sf -m 5 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 5; done   # wait for weights to finish loading before the proof shot
   USE_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
   T=$(date +%s)
   R=$(curl -sf -m 300 "http://127.0.0.1:$PORT/v1/chat/completions" -H 'Content-Type: application/json' \
