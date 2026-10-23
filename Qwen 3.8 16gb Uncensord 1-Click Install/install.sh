@@ -318,22 +318,23 @@ fi
 
 # ---------- STAGE 5.75: endpoint info command (every mode) ----------
 if ! have endpoint; then
-  cat > "$TK/endpoint" <<EOE
+  cat > "$TK/endpoint" <<'EOE'
 #!/bin/bash
-IP=\$(hostname -I 2>/dev/null | awk '{print \$1}')
-AL=${ALIAS_P}
-[ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && AL=${ALIAS_V}
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "=================================================================="
 echo " YOUR LOCAL MODEL ENDPOINT"
-echo "   base URL : http://\$IP:$PORT/v1        (also: 127.0.0.1 from this box)"
-echo "   model    : \$AL"
+echo "   base URL : http://__IP__:__PORT__/v1        (also: 127.0.0.1 from this box)"
+echo "   model    : __ALIAS__"
 echo "   api key  : none required"
 echo "   try it   :"
-echo "     curl http://\$IP:$PORT/v1/chat/completions -H \"Content-Type: application/json\" \\"
-echo "       -d '{\"model\":\"\$AL\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
-echo "   status   : \$(curl -sf -m 4 http://127.0.0.1:$PORT/health || echo 'server not running - check: systemctl --user status llama-*')"
+echo "     curl http://__IP__:__PORT__/v1/chat/completions \\"
+echo "       -H 'Content-Type: application/json' \\"
+echo "       -d '{"model":"__ALIAS__","messages":[{"role":"user","content":"hello"}]}'"
+echo "   status   : $(curl -sf -m 4 http://127.0.0.1:__PORT__/health || echo 'server not running - check: systemctl --user status llama-*')"
 echo "=================================================================="
 EOE
+  UA=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
+  sed -i "s|__IP__|$(hostname -I 2>/dev/null | awk '{print $1}')|g; s|__PORT__|$PORT|g; s|__ALIAS__|$UA|g" "$TK/endpoint"
   chmod +x "$TK/endpoint"
   SUDO "cp $TK/endpoint /usr/local/bin/endpoint" 2>/dev/null || cp "$TK/endpoint" "$HOME/.local/bin/" 2>/dev/null || true
   mark endpoint
