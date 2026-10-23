@@ -329,7 +329,7 @@ echo "   api key  : none required"
 echo "   try it   :"
 echo "     curl http://__IP__:__PORT__/v1/chat/completions \\"
 echo "       -H 'Content-Type: application/json' \\"
-BODY="-d '{"model":"__ALIAS__","messages":[{"role":"user","content":"hello"}]}'"
+BODY='-d {"model":"__ALIAS__","messages":[{"role":"user","content":"hello"}]}'
 echo "       $BODY"
 echo "   status   : $(curl -sf -m 4 http://127.0.0.1:__PORT__/health || echo 'server not running - check: systemctl --user status llama-*')"
 echo "=================================================================="
