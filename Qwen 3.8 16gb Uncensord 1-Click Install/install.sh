@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.2-freshcurl"
+VER="2.3-show"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -25,8 +25,22 @@ PORT=1234; ALIAS_V="qwen38-27b-unc-vision-96k"; ALIAS_P="qwen38-27b-unc-128k"
 STATE="$HOME/.turnkey-llm.state"; PASSF="$HOME/.install-pass"
 LOG="$HOME/install.log"; export TK="$HOME/.turnkey-llm"
 
-say(){ echo "[installer] $*" | tee -a "$LOG"; }
-die(){ say "STOP: $*"; say "Retry after fixing: re-run the same one-line command."; exit 1; }
+# ---------- palette: the show needs contrast; pipes and NO_COLOR get plain text ----------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  RD=$'\e[1;31m'; GR=$'\e[1;32m'; YL=$'\e[1;33m'; BL=$'\e[1;34m'; MG=$'\e[1;35m'; CY=$'\e[1;36m'; DM=$'\e[2m'; BD=$'\e[1m'; C0=$'\e[0m'
+else RD=""; GR=""; YL=""; BL=""; MG=""; CY=""; DM=""; BD=""; C0=""; fi
+strip(){ sed -r 's/\x1b\[[0-9;]*m//g'; }
+say(){ printf '%s %s\n' "${DM}[installer]${C0}" "$1"; printf '%s %s\n' "[installer]" "$1" | strip >> "$LOG"; }
+die(){ printf '%s\n' "${DM}[installer]${C0} ${RD}STOP: $*${C0}"; printf '%s\n' "[installer] STOP: $*" | strip >> "$LOG"
+       printf '%s\n' "${DM}[installer]${C0} ${YL}Retry after fixing: re-run the same one-line command.${C0}"; exit 1; }
+BANNER=' ___ _      _   ___ _  ____      _____ _    _      _____   _______ ___ ___
+| _ ) |    /_\ / __| |/ /\ \    / / __| |  | |    | _ ) \ / /_   _| __/ __|
+| _ \ |__ / _ \ (__| '"'"' <  \ \/\/ /| _|| |__| |__  | _ \ \ V /  | | | _|\__ \
+|___/____/_/ \_\___|_|\_\  \_/\_/ |___|____|____| |___/ |_|   |_| |___|___/'
+banner(){ printf '%s\n' "  ${BL}${BANNER}${C0}"
+          printf '%s\n' "  ${DM}──────────── turnkey uncensored AI, one command ────────────${C0}"
+          { printf '%s\n' "$BANNER"; echo "  turnkey uncensored AI, one command"; } >> "$LOG"; }
+banner
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
 mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
 # ---------- GPU survey helpers: 1-4 cards, ANY mix of sizes ----------
@@ -182,11 +196,11 @@ ask_mode(){
   [ -f "$MODE_FILE" ] && return 0
   [ "$PROFILE" = pending ] && { [ -s "$TK/gpus.businfo" ] && say "Mode menu deferred to after the driver reboot - your cards on the bus: $(cat "$TK/gpus.businfo")"; return 0; }
   [ -n "${CTX_V:-}" ] || { . "$TK/plan.env" 2>/dev/null || return 0; }
-  echo; echo "Pick ONE (you can switch any time later with:  llama-mode vision|plain )"
+  echo; echo "${BD}Pick ONE${C0} ${DM}(you can switch any time later with:  llama-mode vision|plain )${C0}"
   if [ "$PROFILE" = 16g ]; then
-    echo "  DETECTED: ${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" ) - the best fit for THIS machine:"
-    echo "  1) VISION    + $(( CTX_V / 1024 ))K context - it can see images        [conversation memory: $KVC]"
-    echo "  2) TEXT-ONLY + $(( CTX_P / 1024 ))K context - deeper sessions, no pics [conversation memory: $KVC]"
+    echo "  ${CY}DETECTED:${C0} ${BD}${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM${C0}$( [ -s "$TK/gpus.junk" ] && echo "${DM} (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))${C0}" ) ${YL}- the best fit for THIS machine:${C0}"
+    echo "  ${GR}1)${C0} ${BD}VISION${C0}    + ${GR}$(( CTX_V / 1024 ))K${C0} context - it can see images        ${DM}[conversation memory: $KVC]${C0}"
+    echo "  ${GR}2)${C0} ${BD}TEXT-ONLY${C0} + ${GR}$(( CTX_P / 1024 ))K${C0} context - deeper sessions, no pics ${DM}[conversation memory: $KVC]${C0}"
     read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
   else
     echo "  DETECTED: ${NRIDE:-1} usable NVIDIA card(s), ~$(( ( ${TOTALPOOL:-${TOTAL:-0}} + 512 ) / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" )."
@@ -204,9 +218,9 @@ ask_mode(){
 ask_mode
 MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
 if [ ! -f "$AGENT_FILE" ]; then
-  echo; echo "What should sit on top of your new model?";
-  echo "  1) Hermes Agent (chat terminal + tools + memory) - recommended";
-  echo "  2) Raw endpoint only (skip Hermes - use the OpenAI-compatible API directly)";
+  echo; echo "${BD}What should sit on top of your new model?${C0}"
+  echo "  ${GR}1)${C0} Hermes Agent (chat terminal + tools + memory) ${DM}- recommended${C0}"
+  echo "  ${GR}2)${C0} Raw endpoint only ${DM}(skip Hermes - use the OpenAI-compatible API directly)${C0}"
   read -rp " [1/2, Enter=1] " aa < /dev/tty || aa=1
   case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
   echo "$AGENT" > "$AGENT_FILE"
@@ -236,12 +250,11 @@ if ! have driver; then
 [ -f \"$HOME/.turnkey-llm.incomplete\" ] && { curl -fsSL \"$INSTALL_URL\" | bash || { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed ; } ; } || true"
     grep -q 'turnkey-llm resume hook' "$HOME/.bashrc" 2>/dev/null || echo "$HOOK" >> "$HOME/.bashrc"
     touch "$HOME/.turnkey-llm.incomplete"
-    say "==========================================================="
-    say " REBOOTING NOW - your SSH will drop. That is normal."
-    say " Log back in in ~2 minutes: the install RESUMES ON SCREEN the"
-    say " moment your prompt appears - you will watch it finish. It also"
-    say " never started without you: this box waits for your login."
-    say "==========================================================="
+    printf '%s\n' "${YL}  ╔══════════════════════════════════════════════════════════════════╗${C0}
+  ${YL}║${C0}  ${BD}REBOOTING NOW${C0} - your SSH will drop. ${YL}That is normal.${C0}               ${YL}║${C0}
+  ${YL}║${C0}  Log back in in ~2 minutes: the install ${GR}RESUMES ON SCREEN${C0} the       ${YL}║${C0}
+  ${YL}║${C0}  moment your prompt appears - you will watch it finish.             ${YL}║${C0}
+  ${YL}╚══════════════════════════════════════════════════════════════════╝${C0}"; printf '%s\n' "REBOOTING NOW - SSH will drop; log back in and it resumes" >> "$LOG"
     sleep 3
     SUDO "systemctl reboot" || die "reboot failed - run: sudo reboot, then re-run the installer"
     exit 0
@@ -491,9 +504,10 @@ rm -f "$HOME/.turnkey-llm.incomplete"
 sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null || true
 echo; say "DONE. your model is live on ALL network interfaces (mode: $MODE)."
 SAY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-echo "  =================================================================="
-echo "   ENDPOINT : http://$SAY_IP:$PORT/v1"
-echo "   MODEL    : $([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")"
-echo "   anytime  : run the command:  endpoint"
-echo "  =================================================================="
+printf '%s\n' "  ${GR}${BANNER}${C0}"
+printf '%s\n' "  ${GR}╔══════════════════════════════════════════════════════════════════╗${C0}
+  ${GR}║${C0}   ${BD}ENDPOINT${C0} : ${GR}http://$SAY_IP:$PORT/v1${C0}                                    ${GR}║${C0}
+  ${GR}║${C0}   ${BD}MODEL${C0}    : ${CY}$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")${C0}                                  ${GR}║${C0}
+  ${GR}║${C0}   ${BD}anytime${C0}  : run the command:  ${BD}endpoint${C0}                                    ${GR}║${C0}
+  ${GR}╚══════════════════════════════════════════════════════════════════╝${C0}" | tee >(strip >> "$LOG")
 [ "${AGENT:-hermes}" = hermes ] && say "agent ready: run  hermes   to start talking" || say "raw endpoint mode: point any OpenAI-compatible app at the URL above"
