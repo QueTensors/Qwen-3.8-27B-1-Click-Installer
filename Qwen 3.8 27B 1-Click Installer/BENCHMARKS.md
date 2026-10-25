@@ -27,5 +27,16 @@ Agent layer: cold 63 s / warm 26 s; cache proof 11.9 s -> 0.59 s.
    So: want a bigger brain for the same money, mix cards - the hand-off tax is about 3% and the memory is additive. Want a faster brain, buy the newest single card you can afford, and remember generations lie: on the same test the 3060 ran ~60% faster than the 2060 despite near-identical spec sheets.
 
    *For the nerds:* pair-vs-lone-card tests, 2026-10-25, b11829 CUDA, MTP spec-decode on, same unit flags with CUDA_VISIBLE_DEVICES isolating GPU0: single @1772-tok prompt 36.6 t/s, @3524 40.9, ctx capped at 8192 by fit; pair @2048 35.6, @8192 34.9, @16384 32.7, ctx 196608, both cards resident (8.3+11.5 GB). The per-card generational gap is Ampere cache/kernel scheduling, not bandwidth (7% on paper, ~60% measured).
-3. **A 27B dense model at IQ2 fits a 12 GB card with a real 64K agent window** — the entry point for fully-local uncensored assistants is a ~$150 used GPU. Vision needs the 16 GB tier.
-4. MoE (35B-A3B class): runs on 2 GB VRAM but CPU-expert prefill (~23 t/s, DDR3 rig) makes agent-sized prompts impractical below large-RAM systems. Measure your prefill before trusting the VRAM number alone.
+3. **One-card head-to-head, same box, same model, same 64K window, measured 2026-10-25** (IQ2_XS, MTP on, card alone with 100% of itself):
+
+| depth | RTX 3060 | RTX 2060 | 3060 faster by |
+|---|---|---|---|
+| 2K (chat) | ~40 t/s | ~23 t/s | +78% |
+| 8K | 21.7 | 12.9 | +68% |
+| 32K | 18.1 | 11.5 | +57% |
+| 64K | 15.1 | 10.2 | +48% |
+
+   Newer generation = up to nearly 2x the writing speed at chat depth, narrowing toward equal at long depth (both cards pay the same attention bill eventually). Plain advice: **old cards to grow memory, new cards to gain speed.** First-request times after a restart include reading the model off disk (we saw 0.3 t/s on a cold first touch) - that is storage, not silicon, and it never repeats. Prefill rates for these runs are pending: measured externally by the latency monitor, since the server does not report them in-stream.
+
+4. **A 27B dense model at IQ2 fits a 12 GB card with a real 64K agent window** — the entry point for fully-local uncensored assistants is a ~$150 used GPU. Vision needs the 16 GB tier.
+5. MoE (35B-A3B class): runs on 2 GB VRAM but CPU-expert prefill (~23 t/s, DDR3 rig) makes agent-sized prompts impractical below large-RAM systems. Measure your prefill before trusting the VRAM number alone.
