@@ -6,7 +6,7 @@
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
 VER="2.9d-honestmenu"
-INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
+INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
 
