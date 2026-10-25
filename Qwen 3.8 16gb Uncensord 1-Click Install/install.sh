@@ -222,7 +222,7 @@ if ! have driver; then
     chmod +x "$HOME/install.sh" 2>/dev/null || true
     loginctl enable-linger "$(id -un)" 2>/dev/null || true   # lets the llama service itself start at boot later
     HOOK="# turnkey-llm resume hook (auto-added; removed when install completes)
-[ -f \"$HOME/.turnkey-llm.incomplete\" ] && { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed || curl -fsSL \"$INSTALL_URL\" | bash ; } || true'
+[ -f \"$HOME/.turnkey-llm.incomplete\" ] && { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed || curl -fsSL \"$INSTALL_URL\" | bash ; } || true"
     grep -q 'turnkey-llm resume hook' "$HOME/.bashrc" 2>/dev/null || echo "$HOOK" >> "$HOME/.bashrc"
     touch "$HOME/.turnkey-llm.incomplete"
     say "==========================================================="
