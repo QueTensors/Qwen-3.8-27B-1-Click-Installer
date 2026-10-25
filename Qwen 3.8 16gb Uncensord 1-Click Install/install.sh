@@ -5,7 +5,8 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.1-multigpu-1024"
+VER="2.1c-resumecurl"
+INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
 
@@ -217,10 +218,11 @@ if ! have driver; then
     SUDO "apt-get update -qq && apt-get install -y -qq linux-headers-\$(uname -r) nvidia-driver-595 || ubuntu-drivers autoinstall" || die "driver install failed (see above)"
     # arm the resume path: LOGIN HOOK ONLY (owner's call: after the driver reboot the install
     # resumes visibly when the viewer SSHes in — the box waits quietly until then).
-    cp -f "$0" "$HOME/install.sh" 2>/dev/null || true; chmod +x "$HOME/install.sh" 2>/dev/null || true
+    case "$0" in *install.sh) [ -f "$0" ] && cp -f "$0" "$HOME/install.sh" ;; esac || true
+    chmod +x "$HOME/install.sh" 2>/dev/null || true
     loginctl enable-linger "$(id -un)" 2>/dev/null || true   # lets the llama service itself start at boot later
-    HOOK='# turnkey-llm resume hook (auto-added; removed when install completes)
-[ -f "$HOME/.turnkey-llm.incomplete" ] && bash "$HOME/install.sh" --resumed || true'
+    HOOK="# turnkey-llm resume hook (auto-added; removed when install completes)
+[ -f \"$HOME/.turnkey-llm.incomplete\" ] && { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed || curl -fsSL \"$INSTALL_URL\" | bash ; } || true'
     grep -q 'turnkey-llm resume hook' "$HOME/.bashrc" 2>/dev/null || echo "$HOOK" >> "$HOME/.bashrc"
     touch "$HOME/.turnkey-llm.incomplete"
     say "==========================================================="
