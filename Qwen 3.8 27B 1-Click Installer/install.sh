@@ -6,7 +6,7 @@
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
 VER="2.9d-honestmenu"
-INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
+INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
 
@@ -38,8 +38,8 @@ BANNER=' ___ _      _   ___ _  ____      _____ _    _      _____   _______ ___ _
 | _ \ |__ / _ \ (__| '"'"' <  \ \/\/ /| _|| |__| |__  | _ \ \ V /  | | | _|\__ \
 |___/____/_/ \_\___|_|\_\  \_/\_/ |___|____|____| |___/ |_|   |_| |___|___/'
 banner(){ printf '%s\n' "  ${BL}${BANNER}${C0}"
-          printf '%s\n' "  ${DM}────── Qwen 3.8 27B, uncensored, one command ──────${C0}"
-          { printf '%s\n' "$BANNER"; echo "  Qwen 3.8 27B, uncensored, one command"; } >> "$LOG"; }
+          printf '%s\n' "  ${DM}───────────── your own AI brain, one command ─────────────${C0}"
+                    { printf '%s\n' "$BANNER"; echo "  your own AI brain, one command"; } >> "$LOG"; }
 banner
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
 mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
@@ -256,7 +256,7 @@ ask_think
 STYLE_FILE="$HOME/.install-style"
 if [ ! -f "$STYLE_FILE" ]; then
   echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(switch any time later:  llama-style censored|uncensored)${C0}"
-  echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - this brain as built: answers anything, zero refusals ${DM}(the point of this installer)${C0}"
+  echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - this brain as built: answers anything, zero refusals ${DM}(its factory default)${C0}"
   echo "  ${GR}2)${C0} ${BD}CENSORED${C0}    - workplace-appropriate TONE: tactful, euphemistic, not graphic ${DM}(same brain; it steers phrasing, this build never refuses)${C0}"
   read -rp " [1/2, Enter=1] " sa < /dev/tty || sa=1
   case "$sa" in 2*) STY=censored;; *) STY=uncensored;; esac
