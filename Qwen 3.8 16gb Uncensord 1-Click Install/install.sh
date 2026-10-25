@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.3-show"
+VER="2.4-qwenbranded"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -38,8 +38,8 @@ BANNER=' ___ _      _   ___ _  ____      _____ _    _      _____   _______ ___ _
 | _ \ |__ / _ \ (__| '"'"' <  \ \/\/ /| _|| |__| |__  | _ \ \ V /  | | | _|\__ \
 |___/____/_/ \_\___|_|\_\  \_/\_/ |___|____|____| |___/ |_|   |_| |___|___/'
 banner(){ printf '%s\n' "  ${BL}${BANNER}${C0}"
-          printf '%s\n' "  ${DM}──────────── turnkey uncensored AI, one command ────────────${C0}"
-          { printf '%s\n' "$BANNER"; echo "  turnkey uncensored AI, one command"; } >> "$LOG"; }
+          printf '%s\n' "  ${DM}────── Qwen 3.8 27B, uncensored, one command ──────${C0}"
+          { printf '%s\n' "$BANNER"; echo "  Qwen 3.8 27B, uncensored, one command"; } >> "$LOG"; }
 banner
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
 mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
@@ -225,6 +225,15 @@ if [ ! -f "$AGENT_FILE" ]; then
   case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
   echo "$AGENT" > "$AGENT_FILE"
 else AGENT=$(cat "$AGENT_FILE"); fi
+STYLE_FILE="$HOME/.install-style"
+if [ ! -f "$STYLE_FILE" ]; then
+  echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(same brain - switch later: llama-style guarded)${C0}"
+  echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - factory state: answers anything, zero refusals ${DM}(what this brain was built for)${C0}"
+  echo "  ${GR}2)${C0} ${BD}GUARDED${C0}   - same weights, a professional filter prompt rides on top ${DM}(work-friendly answers)${C0}"
+  read -rp " [1/2, Enter=1] " sa < /dev/tty || sa=1
+  case "$sa" in 2*) STY=guarded;; *) STY=uncensored;; esac
+  echo "$STY" > "$STYLE_FILE"
+else STY=$(cat "$STYLE_FILE"); fi
 if [ ! -f "$THINK_FILE" ] && [ "$AGENT" = hermes ]; then
   echo; echo "Thinking level for the hidden scratchpad (switch later: llama-mode --thinking low )";
   echo "  1) off (fastest)  2) low  3) medium (recommended)  4) high (slowest, deepest)";
@@ -353,6 +362,13 @@ if ! have serve; then
     SHARD="-sm layer --tensor-split $(cut -d, -f2 "$TK/gpus.txt" | paste -sd,)"
     say "multi-GPU: sharding across $(grep -c , "$TK/gpus.txt") cards, weight split $(cut -d, -f2 "$TK/gpus.txt" | paste -sd,)"
   fi
+  SYSP=""
+  if [ "${STY:-uncensored}" = guarded ]; then
+    SYSP='--sys-prompt You are a helpful, professional AI assistant. Answer factually and completely. Keep content workplace-appropriate; decline only explicit sexual content politely.'
+    say "answer style: GUARDED - professional filter prompt on top of the same brain"
+  else
+    say "answer style: UNCENSORED - factory behavior, no filter prompt"
+  fi
   unit(){ # $1 suffix $2 ctx $3 mmproj-or-empty $4 alias
     local mm=""; [ -n "$3" ] && mm="--mmproj $3 --image-min-tokens 1024"
     cat > "/tmp/llama-$1.service" <<EOS
@@ -362,7 +378,7 @@ After=network.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LIBDIR:$CUDA_LIBS
 $DEVENV
-ExecStart=$BIN -m $4 $mm $SHARD --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
+ExecStart=$BIN -m $4 $mm $SHARD $SYSP --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -392,7 +408,16 @@ echo "now serving: $1 mode"
 EOS
   chmod +x "$TK/llama-mode"
   ln -sf "$TK/llama-mode" "$HOME/.local/bin/llama-mode" 2>/dev/null || true
-  cat > "$TK/install-status" <<'EOS'
+  cat > "$TK/llama-style" <<'EOS'
+#!/bin/bash
+# flip answer style:  llama-style guarded | llama-style uncensored
+case "${1:-}" in guarded|uncensored) ;; *) echo "usage: llama-style guarded|uncensored"; exit 1;; esac
+echo "$1" > "$HOME/.install-style"
+U=$(cat "$HOME/.install-active" 2>/dev/null); systemctl --user restart "llama-$U.service" 2>/dev/null && echo "answer style now: $1 (server restarted)"
+EOS
+  chmod +x "$TK/llama-style"
+  ln -sf "$TK/llama-style" "$HOME/.local/bin/llama-style" 2>/dev/null || true
+  cat > "$TK/install-status" <<'EOS' 
 #!/bin/bash
 S="$HOME/.turnkey-llm.state"
 if [ ! -f "$S" ]; then echo "install not started"; exit 0; fi
