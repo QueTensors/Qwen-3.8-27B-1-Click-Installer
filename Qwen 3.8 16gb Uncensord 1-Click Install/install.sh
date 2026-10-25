@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.5b-busnames"
+VER="2.6-hermes-gate"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -95,7 +95,7 @@ make_plan(){ # turn the survey into concrete tier numbers; writes $TK/plan.env (
   tot=$(awk -F, '{s+=$2} END{print s+0}' "$TK/gpus.txt" 2>/dev/null || echo 0)
   CTXDIV=${CTXDIV:-1}; [ "$CTXDIV" -lt 1 ] 2>/dev/null && CTXDIV=1
   CTX_V=$(( 98304 / CTXDIV )); CTX_P=$(( 131072 / CTXDIV )); KVC="q4_0"
-  CTX12=65536; [ "$tot" -lt 20000 ] && CTX12=32768
+  CTX12=65536
   BESTK=$(( CTX12 / 1024 )); [ "${PROFILE:-}" = 8g ] && BESTK=8
   if [ "$n" -gt 1 ] && [ "${PROFILE:-}" = 16g ] && [ "$CTXDIV" -eq 1 ] && [ "$tot" -ge 23000 ]; then
     CTX_P=196608; ALIAS_P="qwen38-27b-unc-192k"
@@ -204,7 +204,7 @@ ask_mode(){
     read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
   else
     echo "  DETECTED: ${NRIDE:-1} usable NVIDIA card(s), ~$(( ( ${TOTALPOOL:-${TOTAL:-0}} + 512 ) / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" )."
-    echo "  This hardware has ONE optimal fit: the compact text brain at ${BESTK:-32}K context."
+    echo "  This hardware has ONE optimal fit: the compact text brain at ${BESTK:-64}K context."
     if [ "$PROFILE" = 8g ]; then
       echo "  Honest note: the 8.0GB brain BARELY overflows one 8GB card - the overflow spills to system RAM,"
       echo "  so this tier runs at reading speed, not conversation speed. Adding ONE more card (even another 8)"
@@ -218,11 +218,22 @@ ask_mode(){
 ask_mode
 MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
 if [ ! -f "$AGENT_FILE" ]; then
+  HERMES_OK=1
+  [ "${PROFILE:-}" != 16g ] && HERMES_OK=0
+  if [ "$HERMES_OK" = 1 ] && [ "${CTX_P:-0}" -lt 65536 ] && [ "${CTX_V:-0}" -lt 65536 ]; then HERMES_OK=0; fi
   echo; echo "${BD}What should sit on top of your new model?${C0}"
-  echo "  ${GR}1)${C0} Hermes Agent (chat terminal + tools + memory) ${DM}- recommended${C0}"
-  echo "  ${GR}2)${C0} Raw endpoint only ${DM}(skip Hermes - use the OpenAI-compatible API directly)${C0}"
-  read -rp " [1/2, Enter=1] " aa < /dev/tty || aa=1
-  case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
+  if [ "$HERMES_OK" = 1 ]; then
+    echo "  ${GR}1)${C0} Hermes Agent (chat terminal + tools + memory) ${DM}- recommended${C0}"
+    echo "  ${GR}2)${C0} Raw endpoint only ${DM}(skip Hermes - use the OpenAI-compatible API directly)${C0}"
+    read -rp " [1/2, Enter=1] " aa < /dev/tty || aa=1
+    case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
+  else
+    echo "  ${DM}1) Hermes Agent - needs the big brain with 64K+ context; this machine's pool runs${C0}"
+    echo "  ${DM}   the compact model, so the agent would forget its own tool calls. Add a card${C0}"
+    echo "  ${DM}   (or a 16GB+) and re-run to unlock it.${C0}"
+    echo "  ${GR}2)${C0} Raw endpoint ${BD}(this box's right size)${C0} ${DM}- OpenAI-compatible API, point any app at it${C0}"
+    AGENT=off
+  fi
   echo "$AGENT" > "$AGENT_FILE"
 else AGENT=$(cat "$AGENT_FILE"); fi
 STYLE_FILE="$HOME/.install-style"
