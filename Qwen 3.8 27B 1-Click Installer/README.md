@@ -35,6 +35,17 @@ curl -fsSL "https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-In
 - `llama-mode vision|plain` — switch later (16 GB cards) · `install-status` — stage check
 - The server binds **0.0.0.0:1234** (whole LAN can reach it), no API key by default — perfect for a home network, think twice on shared/campus LANs.
 
+## Where the brain comes from
+We don't train models in a garage — we fetch them from the people who did the work and run them on your GPU. Every install pulls these exact files, from these exact pages, no middleman:
+
+| You get | Whose weights | What they did |
+|---|---|---|
+| **Big brain** (16 GB+ cards, IQ3_XXS + MTP drafts) | [RentedNoodle — Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored](https://huggingface.co/RentedNoodle/Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored) | Uncensored re-s quant: refusal filter surgically removed, then group-scaled quant with multi-token-prediction drafts baked in |
+| **Compact brain** (12 GB and under, IQ2_XS) | [huihui-ai — Huihui-Qwen3.8-27B-abliterated-GGUF](https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF) | Abliterated (filter-removed) build, denser compression so a 27B fits one modest card |
+| **Vision add-on** (16 GB cards, optional) | [ISTA-DASLab — Qwen3.8-27B-GSQ-RCO-GGUF](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF) | The official-adjacent mmproj projector that gives the big brain its eyes |
+
+All of these sit on top of the Qwen team's base model, and the server that runs them is llama.cpp. The weights belong to their authors under their own licenses (check each page); our script is MIT. If one of these repos ever vanishes, the installer re-points in a minute — that's the whole "your box, our glue" deal.
+
 ## Benchmarks
 BENCHMARKS.md carries the measured tables behind every claim above (RTX 3060 12G + RTX 2060 12G, full ladders, the 23 MiB-per-1K-context memory formula so you can predict your own card).
 

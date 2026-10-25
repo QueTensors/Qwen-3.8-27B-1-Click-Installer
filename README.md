@@ -62,7 +62,7 @@ Anything that speaks the OpenAI format (apps, scripts, other agents) can connect
 
 **Will it phone home?** It doesn't phone at all. After install, nothing you type ever leaves your machine.
 
-**Is it really uncensored?** The model has had its refusal filter surgically removed — it answers questions that chatbots typically dodge, and it doesn't moralize. (Prefer polite? One command: `llama-style censored`.)
+**Is it really uncensored?** The model weights themselves are a pre-ablated build by their authors (linked under "Where the brain comes from" in the shelf README) — the refusal filter is already gone. Prefer polite? One command: `llama-style censored`.
 
 **Multiple GPUs?** Fully automatic: 1-4 cards in any mix of sizes, weights sharded across all of them at load, smaller junk cards (like an old display card) detected, named, and left to drive your monitor in peace.
 
