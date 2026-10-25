@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.7-ordering"
+VER="2.7b-modesave"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -214,6 +214,8 @@ ask_mode(){
     fi
     ans=2
   fi
+  case "$ans" in 2*) MODE=plain;; *) MODE=vision;; esac
+  echo "$MODE" > "$MODE_FILE"
 }
 ask_agent(){ # hardware-gated, so it also defers until the plan exists (same rule as ask_mode)
   [ -f "$AGENT_FILE" ] && { AGENT=$(cat "$AGENT_FILE"); return 0; }
