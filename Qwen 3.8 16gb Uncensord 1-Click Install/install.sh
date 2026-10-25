@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.6-hermes-gate"
+VER="2.7-ordering"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -215,9 +215,9 @@ ask_mode(){
     ans=2
   fi
 }
-ask_mode
-MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
-if [ ! -f "$AGENT_FILE" ]; then
+ask_agent(){ # hardware-gated, so it also defers until the plan exists (same rule as ask_mode)
+  [ -f "$AGENT_FILE" ] && { AGENT=$(cat "$AGENT_FILE"); return 0; }
+  [ "$PROFILE" = pending ] && { AGENT=hermes; return 0; }   # decided for real post-reboot, with numbers
   HERMES_OK=1
   [ "${PROFILE:-}" != 16g ] && HERMES_OK=0
   if [ "$HERMES_OK" = 1 ] && [ "${CTX_P:-0}" -lt 65536 ] && [ "${CTX_V:-0}" -lt 65536 ]; then HERMES_OK=0; fi
@@ -235,7 +235,22 @@ if [ ! -f "$AGENT_FILE" ]; then
     AGENT=off
   fi
   echo "$AGENT" > "$AGENT_FILE"
-else AGENT=$(cat "$AGENT_FILE"); fi
+}
+ask_think(){
+  [ -f "$THINK_FILE" ] && { TH=$(cat "$THINK_FILE" 2>/dev/null || echo none); return 0; }
+  [ "$AGENT" != hermes ] && { TH=none; return 0; }
+  [ "$PROFILE" = pending ] && { TH=medium; return 0; }   # asked post-reboot with the rest
+  echo; echo "Thinking level for the hidden scratchpad (switch later: llama-mode --thinking low )";
+  echo "  1) off (fastest)  2) low  3) medium (recommended)  4) high (slowest, deepest)";
+  read -rp " [1-4, Enter=3] " t < /dev/tty || t=3
+  case "$t" in 1*) TH=none;; 2*) TH=low;; 4*) TH=high;; *) TH=medium;; esac
+  echo "$TH" > "$THINK_FILE"
+}
+ask_mode
+MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
+ask_agent
+ask_think
+[ "$AGENT" != hermes ] && TH=none
 STYLE_FILE="$HOME/.install-style"
 if [ ! -f "$STYLE_FILE" ]; then
   echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(switch any time later:  llama-style censored|uncensored)${C0}"
@@ -245,14 +260,7 @@ if [ ! -f "$STYLE_FILE" ]; then
   case "$sa" in 2*) STY=censored;; *) STY=uncensored;; esac
   echo "$STY" > "$STYLE_FILE"
 else STY=$(cat "$STYLE_FILE"); fi
-if [ ! -f "$THINK_FILE" ] && [ "$AGENT" = hermes ]; then
-  echo; echo "Thinking level for the hidden scratchpad (switch later: llama-mode --thinking low )";
-  echo "  1) off (fastest)  2) low  3) medium (recommended)  4) high (slowest, deepest)";
-  read -rp " [1-4, Enter=3] " t < /dev/tty || t=3
-  case "$t" in 1*) TH=none;; 2*) TH=low;; 4*) TH=high;; *) TH=medium;; esac
-  echo "$TH" > "$THINK_FILE"
-else TH=$(cat "$THINK_FILE"); fi
-[ "$AGENT" != hermes ] && TH=none
+
 
 # ---------- STAGE 1: driver (may reboot once; resumes automatically) ----------
 if ! have driver; then
@@ -292,8 +300,11 @@ if [ "$(cat "$HOME/.install-profile")" = pending ]; then
 fi
 PROFILE=$(cat "$HOME/.install-profile")
 . "$TK/plan.env" 2>/dev/null || true   # a multi-GPU box may serve the 192K alias; keep every stage reading the one plan
-ask_mode                                # deferred from a driverless first boot: NOW the menu can name the cards
+ask_mode                                # deferred from a driverless first boot: NOW the menus can name the cards
 MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
+ask_agent
+ask_think
+[ "$AGENT" != hermes ] && TH=none
 mark driver
 
 # ---------- STAGE 2: llama.cpp CUDA binaries (no compile) ----------
