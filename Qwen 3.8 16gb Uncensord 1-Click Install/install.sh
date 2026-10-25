@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9b-censoredfix"
+VER="2.9c-tmplfilter"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -388,8 +388,27 @@ if ! have serve; then
   fi
   SYSP=""
   if [ "${STY:-uncensored}" = censored ]; then
-    SYSP='--sys-prompt "You are a helpful, professional AI assistant. Answer factually and completely. Keep content workplace-appropriate; decline only explicit sexual content politely."' 
-    say "answer style: CENSORED - professional filter prompt on top of the same brain"
+    python3 - "$M_MODEL" "$TK/chat-template.jinja" <<'TPEOF'
+import sys, struct
+key = b"tokenizer.chat_template"
+data = open(sys.argv[1], "rb").read(200_000_000)
+needle = struct.pack("<Q", len(key)) + key + b"\x08\x00\x00\x00"
+i = data.find(needle)
+if i < 0: sys.exit(1)
+n = struct.unpack("<Q", data[i+len(needle):i+len(needle)+8])[0]
+tmpl = data[i+len(needle)+8:i+len(needle)+8+n].decode("utf-8")
+filt = ("You are a helpful, professional AI assistant. Answer factually and completely. "
+        "Keep content workplace-appropriate; decline only explicit sexual content politely.")
+wrap = ("{% if messages[0]['role'] != 'system' %}{% set messages = [{'role': 'system', 'content': "
+        + repr(filt) + "}] + messages %}{% endif %}")
+open(sys.argv[2], "w").write(wrap + tmpl)
+TPEOF
+    if [ -s "$TK/chat-template.jinja" ]; then
+      SYSP="--chat-template-file $TK/chat-template.jinja"
+      say "answer style: CENSORED - workplace filter injected into the chat template (server-enforced)"
+    else
+      say "note: could not read the chat template - running without the filter (agent works; add the system prompt client-side if needed)"
+    fi
   else
     say "answer style: UNCENSORED - factory behavior, no filter prompt"
   fi
