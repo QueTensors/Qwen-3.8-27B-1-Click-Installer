@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.1c-resumecurl"
+VER="2.2-freshcurl"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -121,6 +121,17 @@ else
   askpass || die "sudo authentication failed 3 times - re-run and type carefully"
 fi
 
+# ---------- version authority: the script you JUST downloaded always wins ----------
+# A fresh curl means a fresh product: if a previous install left state from a DIFFERENT
+# installer version, its stage marks (and menu answers) are flushed so the new logic runs
+# the whole flow over. Model files live in ~/models and are SHA-gated, so they survive
+# the flush - "start over" costs seconds of re-survey, not a 10GB re-download.
+if [ -f "$STATE" ] && [ "$(cat "$TK/version" 2>/dev/null)" != "$VER" ]; then
+  rm -f "$STATE" "$HOME/.install-profile" "$HOME/.install-mode" "$HOME/.install-agent" "$HOME/.install-think"
+  rm -rf "$TK/gpus.txt" "$TK/gpus.junk" "$TK/gpus.businfo" "$TK/ctxdiv" "$TK/plan.env" "$TK/alias.ctx"
+fi
+mkdir -p "$TK"; echo "$VER" > "$TK/version"
+
 # ---------- single-instance lock (boot-oneshot vs login-hook arbitration) ----------
 exec 9>"$HOME/.turnkey-llm.lock"
 if ! flock -n 9; then
@@ -222,7 +233,7 @@ if ! have driver; then
     chmod +x "$HOME/install.sh" 2>/dev/null || true
     loginctl enable-linger "$(id -un)" 2>/dev/null || true   # lets the llama service itself start at boot later
     HOOK="# turnkey-llm resume hook (auto-added; removed when install completes)
-[ -f \"$HOME/.turnkey-llm.incomplete\" ] && { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed || curl -fsSL \"$INSTALL_URL\" | bash ; } || true"
+[ -f \"$HOME/.turnkey-llm.incomplete\" ] && { curl -fsSL \"$INSTALL_URL\" | bash || { [ -f \"$HOME/install.sh\" ] && bash \"$HOME/install.sh\" --resumed ; } ; } || true"
     grep -q 'turnkey-llm resume hook' "$HOME/.bashrc" 2>/dev/null || echo "$HOOK" >> "$HOME/.bashrc"
     touch "$HOME/.turnkey-llm.incomplete"
     say "==========================================================="
