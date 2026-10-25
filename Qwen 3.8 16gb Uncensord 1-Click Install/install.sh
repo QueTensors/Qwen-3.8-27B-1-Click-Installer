@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.0-sam-bones-1022"
+VER="2.1-multigpu-1024"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
 
@@ -28,6 +28,69 @@ say(){ echo "[installer] $*" | tee -a "$LOG"; }
 die(){ say "STOP: $*"; say "Retry after fixing: re-run the same one-line command."; exit 1; }
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
 mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
+# ---------- GPU survey helpers: 1-4 cards, ANY mix of sizes ----------
+# The model shards across every card at load (llama split-mode layer, weights
+# distributed proportional to each card's VRAM). Show build caps at 4 cards.
+gpus(){ nvidia-smi --query-gpu=index,memory.total --format=csv,noheader,nounits 2>/dev/null | tr -d ' ' | awk -F, 'NF==2{print $1","$2}' | sort -t, -k2,2nr | head -4; }
+size_gpus(){ # $1 = "idx,MB" lines. Sets TOTAL MIN NGPU PROFILE CTXDIV from the mix.
+  NGPU=$(printf '%s\n' "$1" | grep -c ,)
+  TOTAL=$(awk -F, '{s+=$2} END{print s+0}' <<<"$1")
+  MIN=$(cut -d, -f2 <<<"$1" | sort -n | head -1)
+  CTXDIV=1
+  if [ "$NGPU" -eq 1 ]; then
+    # single card: the original proven ladder, unchanged
+    echo "$1" > "$TK/gpus.txt"
+    if   [ "$TOTAL" -ge 14336 ]; then PROFILE=16g
+    elif [ "$TOTAL" -ge 10752 ]; then PROFILE=12g
+    elif [ "$TOTAL" -ge  7168 ]; then PROFILE=8g
+    else PROFILE=small; fi
+    return 0
+  fi
+  # multi-card: cards under ~6GB can't carry a slice of the big brain, under ~3GB can't
+  # even open a CUDA context usefully - junk sits the shard OUT and is reported, never
+  # silently dropped, and never drags the box below what its GOOD cards can do alone.
+  BIG=$(awk -F, '$2>=5900' <<<"$1"); NBIG=$(grep -c , <<<"$BIG")
+  BTOTAL=$(awk -F, '{s+=$2} END{print s+0}' <<<"$BIG")
+  ANY=$(awk -F, '$2>=3000' <<<"$1"); NANY=$(grep -c , <<<"$ANY")
+  ATOTAL=$(awk -F, '{s+=$2} END{print s+0}' <<<"$ANY")
+  RIDE=""; TOTAL=$ATOTAL
+  if [ "$NBIG" -ge 2 ] && [ "$BTOTAL" -ge 16000 ]; then
+    PROFILE=16g; RIDE="$BIG"; TOTAL=$BTOTAL
+    if   [ "$BTOTAL" -ge 23000 ]; then :     # >=~12GB free after weights -> full ctx
+    elif [ "$BTOTAL" -ge 19000 ]; then CTXDIV=2
+    else CTXDIV=4; fi
+  elif [ "$NANY" -ge 2 ] && [ "$ATOTAL" -ge 14000 ]; then
+    PROFILE=12g; RIDE="$ANY"
+  elif [ "$NANY" -eq 1 ]; then
+    # one real card + junk: run the single-card ladder on it - junk changes nothing
+    RIDE="$ANY"; TOTAL=$(cut -d, -f2 <<<"$ANY" | head -1)
+    if   [ "$TOTAL" -ge 14336 ]; then PROFILE=16g
+    elif [ "$TOTAL" -ge 10752 ]; then PROFILE=12g
+    elif [ "$TOTAL" -ge  7168 ]; then PROFILE=8g
+    else PROFILE=small; fi
+  else PROFILE=small; RIDE="$1"; fi   # keep the true combined TOTAL so the refusal message quotes real numbers
+  echo "$RIDE" > "$TK/gpus.txt"
+  # who's watching: every detected card not on the ride list, so the survey can say it out loud
+  comm -23 <(sort <<<"$1") <(sort <<<"$RIDE") | tr '\n' ' ' | sed 's/ $//' > "$TK/gpus.junk"
+  return 0
+}
+make_plan(){ # turn the survey into concrete tier numbers; writes $TK/plan.env (menu + serve + resumed runs all read this one file)
+  local n tot
+  n=$(grep -c , "$TK/gpus.txt" 2>/dev/null || echo 1)
+  tot=$(awk -F, '{s+=$2} END{print s+0}' "$TK/gpus.txt" 2>/dev/null || echo 0)
+  CTXDIV=${CTXDIV:-1}; [ "$CTXDIV" -lt 1 ] 2>/dev/null && CTXDIV=1
+  CTX_V=$(( 98304 / CTXDIV )); CTX_P=$(( 131072 / CTXDIV )); KVC="q4_0"
+  CTX12=65536; [ "$tot" -lt 20000 ] && CTX12=32768
+  BESTK=$(( CTX12 / 1024 )); [ "${PROFILE:-}" = 8g ] && BESTK=8
+  if [ "$n" -gt 1 ] && [ "${PROFILE:-}" = 16g ] && [ "$CTXDIV" -eq 1 ] && [ "$tot" -ge 23000 ]; then
+    CTX_P=196608; ALIAS_P="qwen38-27b-unc-192k"
+    if [ "${KV_MODE:-auto}" = q8 ]; then KVC="q8_0"; CTX_P=131072; ALIAS_P="qwen38-27b-unc-128k"
+    elif [ "$tot" -ge 26000 ] && [ "${KV_MODE:-auto}" != q4 ]; then KVC="q8_0"; fi
+  fi
+  NRIDE=$n; TOTALPOOL=$tot
+  { echo "CTX_V=$CTX_V"; echo "CTX_P=$CTX_P"; echo "CTX12=$CTX12"; echo "BESTK=$BESTK"; echo "KVC=$KVC"; echo "TOTALPOOL=$tot"; echo "NRIDE=$n"; echo "ALIAS_P=$ALIAS_P"; } > "$TK/plan.env"
+  echo "$ALIAS_P" > "$TK/alias.ctx"
+}
 
 # ---------- resume plumbing ----------
 SUDO(){ echo "$PASS" | sudo -S -p '' bash -c "$*"; }
@@ -72,12 +135,57 @@ if ! flock -n 9; then
   exit 0
 fi
 
+# ---------- STAGE 0: preflight + hardware survey (runs BEFORE the menu, so the menu can talk about YOUR cards) ----------
+if ! have preflight; then
+  say "preflight v$VER"
+  . /etc/os-release 2>/dev/null || die "not a recognized Linux (no /etc/os-release)"
+  [ "${ID:-}" = ubuntu ] || [ "${ID_LIKE:-}" = ubuntu ] || die "this build targets Ubuntu (detected: $ID). Please run on Ubuntu 22.04+."
+  command -v lspci >/dev/null 2>&1 && ! lspci 2>/dev/null | grep -qi nvidia && die "no NVIDIA GPU detected on this machine - the show build needs at least one"
+  FREEDISK=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc '0-9')
+  [ "${FREEDISK:-0}" -ge 30 ] || die "need >=30 GB free disk in $HOME (have ${FREEDISK}GB free)"
+  mkdir -p "$TK"
+  GPULIST=$(gpus)
+  if [ -z "$GPULIST" ]; then PROFILE=pending; CTXDIV=1; else size_gpus "$GPULIST"; fi
+  [ -n "${FORCE_PROFILE:-}" ] && PROFILE="$FORCE_PROFILE"   # test override: hardware still surveyed and printed honestly
+  echo "$PROFILE" > "$HOME/.install-profile"; echo "$CTXDIV" > "$TK/ctxdiv"
+  if [ "$PROFILE" = pending ]; then
+    say "GPU: NVIDIA hardware on the bus, driver not up yet - card sizing finishes right after the stage-1 reboot ; disk OK (${FREEDISK}GB free)"
+  else
+    [ "$PROFILE" = small ] && [ -z "${FORCE_PROFILE:-}" ] && die "combined ${TOTAL} MiB across ${NGPU} card(s), smallest ${MIN} MiB - under the floor for this model. Options: a bigger box, or watch the episode anyway."
+    make_plan
+    say "GPU: ${NRIDE} card(s) riding $(tr ',' ':' < "$TK/gpus.txt" | paste -sd' ') = ${TOTALPOOL} MiB pool ; plan: vision ${CTX_V} / text ${CTX_P} ctx, KV ${KVC} $([ -s "$TK/gpus.junk" ] && echo "| sitting it out: $(tr ',' ' ' < "$TK/gpus.junk")") ; disk OK (${FREEDISK}GB free)"
+  fi
+  mark preflight
+fi
+PROFILE=$(cat "$HOME/.install-profile")
+. "$TK/plan.env" 2>/dev/null || true
+
+# ---------- the menu: every number on this screen is THIS machine's truth ----------
 MODE_FILE="$HOME/.install-mode"; THINK_FILE="$HOME/.install-think"; AGENT_FILE="$HOME/.install-agent"
 if [ ! -f "$MODE_FILE" ]; then
-  echo; echo "Pick ONE (you can switch any time later with:  llama-mode vision|plain )";
-  echo "  1) vision + 96K context    - it can see images";
-  echo "  2) no vision + 128K context - deeper text sessions, no images";
-  read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
+  echo; echo "Pick ONE (you can switch any time later with:  llama-mode vision|plain )"
+  if [ "$PROFILE" = pending ] || [ -z "${CTX_V:-}" ]; then
+    echo "  NVIDIA GPU(s) detected - exact sizes are read once the driver installs (next step, one reboot)."
+    echo "  1) vision mode     - it can see images, if your cards can carry them"
+    echo "  2) text-only mode  - the deepest text session your pool allows"
+    read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
+  elif [ "$PROFILE" = 16g ]; then
+    echo "  DETECTED: ${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" ) - the best fit for THIS machine:"
+    echo "  1) VISION    + $(( CTX_V / 1024 ))K context - it can see images        [conversation memory: $KVC]"
+    echo "  2) TEXT-ONLY + $(( CTX_P / 1024 ))K context - deeper sessions, no pics [conversation memory: $KVC]"
+    read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
+  else
+    echo "  DETECTED: ${NRIDE:-1} usable NVIDIA card(s), ~$(( ( ${TOTALPOOL:-${TOTAL:-0}} + 512 ) / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" )."
+    echo "  This hardware has ONE optimal fit: the compact text brain at ${BESTK:-32}K context."
+    if [ "$PROFILE" = 8g ]; then
+      echo "  Honest note: the 8.0GB brain BARELY overflows one 8GB card - the overflow spills to system RAM,"
+      echo "  so this tier runs at reading speed, not conversation speed. Adding ONE more card (even another 8)"
+      echo "  upgrades this machine to the full big model with real context. It is one eBay purchase away."
+    else
+      echo "  (Vision and the big model need a 16GB+ card pool - add cards later, re-run, it upgrades.)"
+    fi
+    ans=2
+  fi
   case "$ans" in 2*) MODE=plain;; *) MODE=vision;; esac
   echo "$MODE" > "$MODE_FILE"
 else MODE=$(cat "$MODE_FILE"); fi
@@ -97,29 +205,6 @@ if [ ! -f "$THINK_FILE" ] && [ "$AGENT" = hermes ]; then
   echo "$TH" > "$THINK_FILE"
 else TH=$(cat "$THINK_FILE"); fi
 [ "$AGENT" != hermes ] && TH=none
-
-# ---------- STAGE 0: preflight (before ANY big download) ----------
-if ! have preflight; then
-  say "preflight v$VER"
-  . /etc/os-release 2>/dev/null || die "not a recognized Linux (no /etc/os-release)"
-  [ "${ID:-}" = ubuntu ] || [ "${ID_LIKE:-}" = ubuntu ] || die "this build targets Ubuntu (detected: $ID). Please run on Ubuntu 22.04+."
-  command -v lspci >/dev/null 2>&1 && ! lspci 2>/dev/null | grep -qi nvidia && die "no NVIDIA GPU detected on this machine - the show build needs one"
-  FREEDISK=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc '0-9')
-  [ "${FREEDISK:-0}" -ge 30 ] || die "need >=30 GB free disk in $HOME (have ${FREEDISK}GB)"
-  VRAM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
-  [ -n "$VRAM" ] || VRAM=unknown   # no driver yet is fine - stage 1 installs it
-  if   [ "${FORCE_PROFILE:-}" = 12g ]; then PROFILE=12g   # env override for testing other tiers
-  elif [ "$VRAM" = unknown ]; then PROFILE=16g
-  elif [ "$VRAM" -ge 14336 ]; then PROFILE=16g
-  elif [ "$VRAM" -ge 10752 ]; then PROFILE=12g
-  elif [ "$VRAM" -ge  7168 ]; then PROFILE=8g
-  else PROFILE=small; fi
-  echo "$PROFILE" > "$HOME/.install-profile"
-  say "GPU: ${VRAM} MiB VRAM -> profile $PROFILE ; disk OK (${FREEDISK}GB free)"
-  [ "$PROFILE" = small ] && die "your card has ${VRAM}MiB - under the 8GB floor for this model. Options: a bigger box, or watch the episode anyway."
-  mark preflight
-fi
-PROFILE=$(cat "$HOME/.install-profile")
 
 # ---------- STAGE 1: driver (may reboot once; resumes automatically) ----------
 if ! have driver; then
@@ -148,6 +233,17 @@ if ! have driver; then
   fi
 fi
 # resumed after reboot via login hook (or driver was already there)
+if [ "$(cat "$HOME/.install-profile")" = pending ]; then
+  GPULIST=$(gpus)
+  [ -n "$GPULIST" ] || die "driver is up but nvidia-smi lists no CUDA GPU - run: nvidia-smi, fix the driver, re-run"
+  size_gpus "$GPULIST"
+  echo "$PROFILE" > "$HOME/.install-profile"; echo "$CTXDIV" > "$TK/ctxdiv"
+  [ "$PROFILE" = small ] && die "combined ${TOTAL} MiB across ${NGPU} card(s), smallest ${MIN} MiB - under the floor for this model."
+  make_plan
+  say "GPU survey complete: ${NRIDE} card(s) riding $(tr ',' ':' < "$TK/gpus.txt" | paste -sd' ') = ${TOTALPOOL} MiB pool ; plan: vision ${CTX_V} / text ${CTX_P} ctx, KV ${KVC} $([ -s "$TK/gpus.junk" ] && echo "| sitting it out: $(tr ',' ' ' < "$TK/gpus.junk")")"
+fi
+PROFILE=$(cat "$HOME/.install-profile")
+. "$TK/plan.env" 2>/dev/null || true   # a multi-GPU box may serve the 196K alias; keep every stage reading the one plan
 mark driver
 
 # ---------- STAGE 2: llama.cpp CUDA binaries (no compile) ----------
@@ -217,7 +313,16 @@ fi
 
 # ---------- STAGE 4: serve (systemd, survives reboot; llama-mode switch) ----------
 if ! have serve; then
-  CTX_V=98304; CTX_P=131072
+  # tier math lives in ONE place (make_plan / plan.env, written at the survey); serve only consumes it.
+  [ -f "$TK/plan.env" ] || make_plan
+  . "$TK/plan.env" 2>/dev/null || { CTX_V=98304; CTX_P=131072; CTX12=65536; KVC="q4_0"; TOTALPOOL=16384; }
+  [ "$CTX_V" -lt 8192 ] && CTX_V=8192; [ "$CTX_P" -lt 8192 ] && CTX_P=8192
+  DEVENV=""; SHARD=""
+  if [ -f "$TK/gpus.txt" ] && [ "$(grep -c , "$TK/gpus.txt")" -gt 1 ]; then
+    DEVENV="Environment=CUDA_VISIBLE_DEVICES=$(cut -d, -f1 "$TK/gpus.txt" | paste -sd,)"
+    SHARD="-sm layer --tensor-split $(cut -d, -f2 "$TK/gpus.txt" | paste -sd,)"
+    say "multi-GPU: sharding across $(grep -c , "$TK/gpus.txt") cards, weight split $(cut -d, -f2 "$TK/gpus.txt" | paste -sd,)"
+  fi
   unit(){ # $1 suffix $2 ctx $3 mmproj-or-empty $4 alias
     local mm=""; [ -n "$3" ] && mm="--mmproj $3 --image-min-tokens 1024"
     cat > "/tmp/llama-$1.service" <<EOS
@@ -226,7 +331,8 @@ Description=Qwen3.8-27B unc IQ3 ($1)
 After=network.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LIBDIR:$CUDA_LIBS
-ExecStart=$BIN -m $4 $mm --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k q4_0 --cache-type-v q4_0 -n 8192 --jinja -fa on
+$DEVENV
+ExecStart=$BIN -m $4 $mm $SHARD --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -238,8 +344,9 @@ EOS
     if [ "$MODE" = vision ]; then unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V"; ACTIVE=vision-96k; else ACTIVE=""; fi
     unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P"; [ -z "${ACTIVE:-}" ] && ACTIVE=plain-128k
   else
+    [ "$NRIDE:-1" -gt 1 ] && [ "${TOTALPOOL:-0}" -lt 20000 ] && say "small-model tier on a ${TOTALPOOL} MiB pool: 32K context (64K needs ~20GB of cards)"
     case "$PROFILE" in
-      12g) unit plain "65536" "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" ;;
+      12g) unit plain "$CTX12" "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" ;;
       *)   unit plain "8192"  "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" ;;
     esac
     ACTIVE=plain
@@ -353,10 +460,15 @@ if ! have verify; then
   echo "$R" | grep -q "TURKEY-READY\|TURKEY" || die "verification completion failed - check: systemctl --user status llama-*"
   # the answer alone can lie: a CPU-fallback server answers too, just 100x slower.
   # GPU-resident check: card must hold several GB, and the reply must have been quick.
-  USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
-  [ "${USED:-0}" -gt 6000 ] || die "the model answered but NOT from the GPU (card holds only ${USED:-?} MiB - cublas/cudart problem, see stage 2.5)"
+  USEDALL=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  [ "${USEDALL:-0}" -gt 6000 ] || die "the model answered but NOT from the GPU (cards hold only ${USEDALL:-?} MiB - cublas/cudart problem, see stage 2.5)"
+  if [ -f "$TK/gpus.txt" ] && [ "$(grep -c , "$TK/gpus.txt")" -gt 1 ]; then
+    HOLD=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | awk '$1>=1500{c++} END{print c+0}')
+    [ "$HOLD" -ge 2 ] || die "multi-card box but only $HOLD card(s) hold weights - the shard didn't engage (check the -sm layer flags in the llama unit)"
+  fi
   [ "$DT" -le 120 ] || say "WARN: first reply took ${DT}s - slower than GPU-resident speeds; check nvidia-smi power draw"
-  say "VERIFIED: model answers FROM GPU (${USED} MiB resident) in ${DT}s on port $PORT."; mark verify
+  NGLIVE=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')
+  say "VERIFIED: model answers FROM GPU (${USEDALL} MiB resident on ${NGLIVE:-1} card(s)) in ${DT}s on port $PORT."; mark verify
 fi
 rm -f "$HOME/.turnkey-llm.incomplete"
 sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null || true
