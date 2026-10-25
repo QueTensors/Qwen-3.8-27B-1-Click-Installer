@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.7b-modesave"
+VER="2.8-switchready"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -365,7 +365,7 @@ fetch(){ # $1 path $2 url $3 sha $4 bytes ; direct-to-~/models, never the hf cac
   mv "$1.part" "$1"; }
 if ! have models; then
   case "$PROFILE" in
-    16g) [ "$MODE" = vision ] && fetch "$M_MM" "$M_MM_URL" "$M_MM_SHA" "$M_MM_BYTES"; fetch "$M_MODEL" "$M_MODEL_URL" "$M_MODEL_SHA" "$M_MODEL_BYTES" ;;
+    16g) fetch "$M_MM" "$M_MM_URL" "$M_MM_SHA" "$M_MM_BYTES"; fetch "$M_MODEL" "$M_MODEL_URL" "$M_MODEL_SHA" "$M_MODEL_BYTES" ;;   # projector always: llama-mode vision must work post-install
     12g) say "12G card: IQ2_XS brain (smaller, honest), text-only, 64K context"
          fetch "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$MODEL_SMALL_URL" skip 0 ;;
     8g|small) say "profile $PROFILE: using the smaller IQ2_XS quant (fits 8GB; less context)"
@@ -411,8 +411,9 @@ EOS
     cp "/tmp/llama-$1.service" "$HOME/.config/systemd/user/"; }
     mkdir -p "$HOME/.config/systemd/user"
   if [ "$PROFILE" = 16g ]; then
-    if [ "$MODE" = vision ]; then unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V"; ACTIVE=vision-96k; else ACTIVE=""; fi
-    unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P"; [ -z "${ACTIVE:-}" ] && ACTIVE=plain-128k
+    unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V"
+    unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P"
+    [ "$MODE" = vision ] && ACTIVE=vision-96k || ACTIVE=plain-128k
   else
     [ "$NRIDE:-1" -gt 1 ] && [ "${TOTALPOOL:-0}" -lt 20000 ] && say "small-model tier on a ${TOTALPOOL} MiB pool: 32K context (64K needs ~20GB of cards)"
     case "$PROFILE" in
@@ -421,14 +422,20 @@ EOS
     esac
     ACTIVE=plain
   fi
-  cat > "$TK/llama-mode" <<'EOS'
+  cat > "$TK/llama-mode" <<EOS
 #!/bin/bash
 # switch between installed modes:  llama-mode vision | llama-mode plain
-[ -z "${1:-}" ] && { echo "usage: llama-mode vision|plain"; exit 1; }
+# (both units exist on flagship boxes; compact boxes are text-only)
+[ -z "\${1:-}" ] && { echo "usage: llama-mode vision|plain"; exit 1; }
+case "\$1" in vision) UNIT=llama-vision-96k.service; ALIAS=$ALIAS_V;; plain) UNIT=llama-$ACTIVE.service; ALIAS=$ALIAS_P;; *) echo "usage: llama-mode vision|plain"; exit 1;; esac
 systemctl --user stop llama-vision-96k.service llama-plain-128k.service llama-plain.service 2>/dev/null
-systemctl --user start "llama-$1.service" 2>/dev/null || systemctl --user start llama-plain.service
-echo "$1" > "$HOME/.install-mode"
-echo "now serving: $1 mode"
+systemctl --user start "\$UNIT" || { echo "that mode isn't installed on this box (compact tier is text-only)"; exit 1; }
+echo "\$1" > "$HOME/.install-mode"
+if [ -f "$HOME/.hermes/config.yaml" ]; then
+  sed -i -E "s/^( *model: )qwen38-27b-unc-[a-z0-9-]+/\1\$ALIAS/; s/^( *default: )qwen38-27b-unc-[a-z0-9-]+/\1\$ALIAS/; s/^( *)(qwen38-27b-unc-[a-z0-9-]+)(: \{\})/\1\$ALIAS\3/" "$HOME/.hermes/config.yaml" 2>/dev/null
+  sed -i "s/^\( *name: Local ([0-9]*)\)/\1/" "$HOME/.hermes/config.yaml" 2>/dev/null
+fi
+echo "now serving: \$1 mode as \$ALIAS (hermes config updated where present)"
 EOS
   chmod +x "$TK/llama-mode"
   ln -sf "$TK/llama-mode" "$HOME/.local/bin/llama-mode" 2>/dev/null || true
