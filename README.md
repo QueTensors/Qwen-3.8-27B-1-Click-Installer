@@ -66,6 +66,8 @@ Anything that speaks the OpenAI format (apps, scripts, other agents) can connect
 
 **Multiple GPUs?** Fully automatic: 1-4 cards in any mix of sizes, weights sharded across all of them at load, smaller junk cards (like an old display card) detected, named, and left to drive your monitor in peace.
 
+**Will bolting on more cards make it faster?** No — more cards = a bigger brain, not a quicker one. Layer-sharding means every card computes its slice one after another on every single token, so four old cards still can't out-run one new one (we measured a matched card-vs-card duel: same model, same flags, newer card won by 48-78%). What extra VRAM genuinely buys you: longer context, higher-fidelity quants of the model (smarter answers, never faster ones), and room to run vision plus hi-fi conversation memory at the same time. Want more tokens per second? That's a newer-card purchase, not an extra-card one.
+
 **Uninstall?** `systemctl --user disable --now 'llama-*'` and delete `~/models` plus `~/.turnkey-llm*` — it's all just files.
 
 ---
