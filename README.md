@@ -70,4 +70,4 @@ Anything that speaks the OpenAI format (apps, scripts, other agents) can connect
 
 ---
 
-*Qwen 3.8 27B is a Trademark of its authors; this installer downloads public model files and asks nothing of you. MIT-licensed script. No affiliation warranty implied — but we tested it on real machines, including a 2060+3060 garage pair.*
+*The model files belong to their authors and this script is MIT-licensed. No affiliation with Nous Research or the Qwen team - just a garage-tested installer: every number in these docs came off real machines in this house, including one very strange box with two mismatched GPUs.*
