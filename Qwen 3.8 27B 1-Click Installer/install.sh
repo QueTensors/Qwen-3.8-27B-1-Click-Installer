@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# turnkey-llm install.sh — bare Ubuntu -> local uncensored Qwen3.8-27B + Hermes, one command.
+# turnkey-llm install.sh — bare Ubuntu -> local censored/uncensored Qwen3.8-27B + Hermes, one command.
 # Viewer UX: `curl -fsSL <url>/install.sh | bash`  (sudo password is the only thing typed;
 # plus two menu picks: vision mode + thinking level). Reboots once for the GPU driver and
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9d-honestmenu"
+VER="2.9e-stylewording"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"

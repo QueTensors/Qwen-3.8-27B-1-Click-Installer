@@ -38,5 +38,5 @@ Agent layer: cold 63 s / warm 26 s; cache proof 11.9 s -> 0.59 s.
 
    Newer generation = up to nearly 2x the writing speed at chat depth, narrowing toward equal at long depth (both cards pay the same attention bill eventually). Plain advice: **old cards to grow memory, new cards to gain speed.** First-request times after a restart include reading the model off disk (we saw 0.3 t/s on a cold first touch) - that is storage, not silicon, and it never repeats. Prefill rates for these runs are pending: measured externally by the latency monitor, since the server does not report them in-stream.
 
-4. **A 27B dense model at IQ2 fits a 12 GB card with a real 64K agent window** — the entry point for fully-local uncensored assistants is a ~$150 used GPU. Vision needs the 16 GB tier.
+4. **A 27B dense model at IQ2 fits a 12 GB card with a real 64K agent window** — the entry point for fully-local assistants (uncensored or censored, your pick) is a ~$150 used GPU. Vision needs the 16 GB tier.
 5. MoE (35B-A3B class): runs on 2 GB VRAM but CPU-expert prefill (~23 t/s, DDR3 rig) makes agent-sized prompts impractical below large-RAM systems. Measure your prefill before trusting the VRAM number alone.

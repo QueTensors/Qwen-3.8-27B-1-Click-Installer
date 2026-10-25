@@ -1,6 +1,6 @@
 # Qwen 3.8 27B — 1-Click Installer
 
-Your own uncensored AI brain, running locally on your Linux box. No cloud, no account, no subscription. One copy-paste and it installs everything: GPU driver, model, chat agent.
+Your own AI brain — uncensored or censored, your pick at install — running locally on your Linux box. No cloud, no account, no subscription. One copy-paste and it installs everything: GPU driver, model, chat agent.
 
 **Built by Blackwell Bytes.**
 
