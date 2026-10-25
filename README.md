@@ -20,7 +20,7 @@ Don't know your card? Open a terminal and type `nvidia-smi`. It'll print it. No 
 Open a terminal and paste this ONE line, then press Enter:
 
 ```
-curl -fsSL "https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh" | bash
+curl -fsSL "https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh" | bash
 ```
 
 It will ask you a few simple questions — every one has a safe default, so **you can press Enter through all of them** and get a great setup. On a fresh machine, the screen will say "REBOOTING NOW" and your terminal disconnects. That's normal! Just log back in within a couple of minutes and the install continues on-screen by itself.

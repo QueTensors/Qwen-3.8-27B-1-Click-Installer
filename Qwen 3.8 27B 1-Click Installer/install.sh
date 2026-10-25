@@ -38,8 +38,8 @@ BANNER=' ___ _      _   ___ _  ____      _____ _    _      _____   _______ ___ _
 | _ \ |__ / _ \ (__| '"'"' <  \ \/\/ /| _|| |__| |__  | _ \ \ V /  | | | _|\__ \
 |___/____/_/ \_\___|_|\_\  \_/\_/ |___|____|____| |___/ |_|   |_| |___|___/'
 banner(){ printf '%s\n' "  ${BL}${BANNER}${C0}"
-          printf '%s\n' "  ${DM}───────────── your own AI brain, one command ─────────────${C0}"
-                    { printf '%s\n' "$BANNER"; echo "  your own AI brain, one command"; } >> "$LOG"; }
+          printf '%s\n' "  ${DM}────── Qwen 3.8 27B: your brain, your rules, one command ──────${C0}"
+                    { printf '%s\n' "$BANNER"; echo "  Qwen 3.8 27B: your brain, your rules, one command"; } >> "$LOG"; }
 banner
 have(){ [ -f "$STATE" ] && grep -qx "$1" "$STATE"; }
 mark(){ grep -qx "$1" "$STATE" 2>/dev/null || echo "$1" >> "$STATE"; }
