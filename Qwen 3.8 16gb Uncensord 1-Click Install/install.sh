@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.8-switchready"
+VER="2.9-gatewayboot"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -482,7 +482,11 @@ if [ "$AGENT" = hermes ] && ! have hermes; then
     && "$HR" config set model.api_key 'local' \
     && "$HR" config set model.reasoning_effort "$TH" \
     || die "failed to write hermes model config"
-  mark hermes
+  # make the agent a daemon, not a session: boots with the box, survives SSH logout
+  "$HR" gateway install >/dev/null 2>&1; "$HR" gateway start >/dev/null 2>&1 \
+    && say "hermes gateway installed as a boot service - it starts on power-on, no terminal needed" \
+    || say "note: run  hermes gateway install  once yourself to enable boot-start"
+  loginctl enable-linger "$(id -un)" 2>/dev/null || true
 fi
 
 # ---------- STAGE 5.5: prefill hermes first-run state ----------
