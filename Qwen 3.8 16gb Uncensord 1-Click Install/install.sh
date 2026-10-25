@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9c-tmplfilter"
+VER="2.9d-honestmenu"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -257,7 +257,7 @@ STYLE_FILE="$HOME/.install-style"
 if [ ! -f "$STYLE_FILE" ]; then
   echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(switch any time later:  llama-style censored|uncensored)${C0}"
   echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - this brain as built: answers anything, zero refusals ${DM}(the point of this installer)${C0}"
-  echo "  ${GR}2)${C0} ${BD}CENSORED${C0}    - classic base behavior: polite refusals, workplace-safe filter ${DM}(same weights, filter prompt on top)${C0}"
+  echo "  ${GR}2)${C0} ${BD}CENSORED${C0}    - workplace-appropriate TONE: tactful, euphemistic, not graphic ${DM}(same brain; it steers phrasing, this build never refuses)${C0}"
   read -rp " [1/2, Enter=1] " sa < /dev/tty || sa=1
   case "$sa" in 2*) STY=censored;; *) STY=uncensored;; esac
   echo "$STY" > "$STYLE_FILE"
