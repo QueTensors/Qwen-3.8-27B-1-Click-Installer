@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.4-qwenbranded"
+VER="2.5-censored-choice"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -227,11 +227,11 @@ if [ ! -f "$AGENT_FILE" ]; then
 else AGENT=$(cat "$AGENT_FILE"); fi
 STYLE_FILE="$HOME/.install-style"
 if [ ! -f "$STYLE_FILE" ]; then
-  echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(same brain - switch later: llama-style guarded)${C0}"
-  echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - factory state: answers anything, zero refusals ${DM}(what this brain was built for)${C0}"
-  echo "  ${GR}2)${C0} ${BD}GUARDED${C0}   - same weights, a professional filter prompt rides on top ${DM}(work-friendly answers)${C0}"
+  echo; echo "${BD}How should Qwen 3.8 27B answer?${C0} ${DM}(switch any time later:  llama-style censored|uncensored)${C0}"
+  echo "  ${GR}1)${C0} ${BD}UNCENSORED${C0} - this brain as built: answers anything, zero refusals ${DM}(the point of this installer)${C0}"
+  echo "  ${GR}2)${C0} ${BD}CENSORED${C0}    - classic base behavior: polite refusals, workplace-safe filter ${DM}(same weights, filter prompt on top)${C0}"
   read -rp " [1/2, Enter=1] " sa < /dev/tty || sa=1
-  case "$sa" in 2*) STY=guarded;; *) STY=uncensored;; esac
+  case "$sa" in 2*) STY=censored;; *) STY=uncensored;; esac
   echo "$STY" > "$STYLE_FILE"
 else STY=$(cat "$STYLE_FILE"); fi
 if [ ! -f "$THINK_FILE" ] && [ "$AGENT" = hermes ]; then
@@ -363,9 +363,9 @@ if ! have serve; then
     say "multi-GPU: sharding across $(grep -c , "$TK/gpus.txt") cards, weight split $(cut -d, -f2 "$TK/gpus.txt" | paste -sd,)"
   fi
   SYSP=""
-  if [ "${STY:-uncensored}" = guarded ]; then
+  if [ "${STY:-uncensored}" = censored ]; then
     SYSP='--sys-prompt You are a helpful, professional AI assistant. Answer factually and completely. Keep content workplace-appropriate; decline only explicit sexual content politely.'
-    say "answer style: GUARDED - professional filter prompt on top of the same brain"
+    say "answer style: CENSORED - professional filter prompt on top of the same brain"
   else
     say "answer style: UNCENSORED - factory behavior, no filter prompt"
   fi
@@ -410,8 +410,8 @@ EOS
   ln -sf "$TK/llama-mode" "$HOME/.local/bin/llama-mode" 2>/dev/null || true
   cat > "$TK/llama-style" <<'EOS'
 #!/bin/bash
-# flip answer style:  llama-style guarded | llama-style uncensored
-case "${1:-}" in guarded|uncensored) ;; *) echo "usage: llama-style guarded|uncensored"; exit 1;; esac
+# flip answer style:  llama-style censored | llama-style uncensored
+case "${1:-}" in censored|uncensored) ;; *) echo "usage: llama-style censored|uncensored"; exit 1;; esac
 echo "$1" > "$HOME/.install-style"
 U=$(cat "$HOME/.install-active" 2>/dev/null); systemctl --user restart "llama-$U.service" 2>/dev/null && echo "answer style now: $1 (server restarted)"
 EOS
