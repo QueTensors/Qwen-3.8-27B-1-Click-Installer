@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.5-censored-choice"
+VER="2.5b-busnames"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/one-click-installers/main/Qwen%203.8%2016gb%20Uncensord%201-Click%20Install/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -175,7 +175,7 @@ if ! have preflight; then
   [ -n "${FORCE_PROFILE:-}" ] && PROFILE="$FORCE_PROFILE"   # test override: hardware still surveyed and printed honestly
   echo "$PROFILE" > "$HOME/.install-profile"; echo "$CTXDIV" > "$TK/ctxdiv"
   if [ "$PROFILE" = pending ]; then
-    BUSNAMES=$(lspci 2>/dev/null | grep -i nvidia | sed 's/^[^:]*:[^:]*[[:space:]]*//; s/^[^:]*:[[:space:]]*//' | sort | uniq -c | sed "s/^ *//" | paste -sd" | ")
+    BUSNAMES=$(lspci 2>/dev/null | grep -i nvidia | grep -Ei 'vga compatible|3d controller|display controller' | sed 's/.*NVIDIA Corporation //' | sort | uniq -c | sed 's/^ *//' | awk '{printf "%s%s", s, $0; s=" | "} END{print ""}')
     [ -n "$BUSNAMES" ] && echo "$BUSNAMES" > "$TK/gpus.businfo"
     say "GPU: on the bus: ${BUSNAMES:-NVIDIA device(s), names unreadable} - driver not up yet, so sizes get read right after the stage-1 reboot ; disk OK (${FREEDISK}GB free)"
   else
