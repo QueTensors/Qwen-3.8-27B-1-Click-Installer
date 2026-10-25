@@ -149,7 +149,9 @@ if ! have preflight; then
   [ -n "${FORCE_PROFILE:-}" ] && PROFILE="$FORCE_PROFILE"   # test override: hardware still surveyed and printed honestly
   echo "$PROFILE" > "$HOME/.install-profile"; echo "$CTXDIV" > "$TK/ctxdiv"
   if [ "$PROFILE" = pending ]; then
-    say "GPU: NVIDIA hardware on the bus, driver not up yet - card sizing finishes right after the stage-1 reboot ; disk OK (${FREEDISK}GB free)"
+    BUSNAMES=$(lspci 2>/dev/null | grep -i nvidia | sed 's/^[^:]*:[^:]*[[:space:]]*//; s/^[^:]*:[[:space:]]*//' | sort | uniq -c | sed "s/^ *//" | paste -sd" | ")
+    [ -n "$BUSNAMES" ] && echo "$BUSNAMES" > "$TK/gpus.businfo"
+    say "GPU: on the bus: ${BUSNAMES:-NVIDIA device(s), names unreadable} - driver not up yet, so sizes get read right after the stage-1 reboot ; disk OK (${FREEDISK}GB free)"
   else
     [ "$PROFILE" = small ] && [ -z "${FORCE_PROFILE:-}" ] && die "combined ${TOTAL} MiB across ${NGPU} card(s), smallest ${MIN} MiB - under the floor for this model. Options: a bigger box, or watch the episode anyway."
     make_plan
@@ -161,15 +163,15 @@ PROFILE=$(cat "$HOME/.install-profile")
 . "$TK/plan.env" 2>/dev/null || true
 
 # ---------- the menu: every number on this screen is THIS machine's truth ----------
+# Driverless first boot? ask_mode stays SILENT and re-runs after the reboot survey,
+# so the menu can never show up before the installer has actually counted the cards.
 MODE_FILE="$HOME/.install-mode"; THINK_FILE="$HOME/.install-think"; AGENT_FILE="$HOME/.install-agent"
-if [ ! -f "$MODE_FILE" ]; then
+ask_mode(){
+  [ -f "$MODE_FILE" ] && return 0
+  [ "$PROFILE" = pending ] && { [ -s "$TK/gpus.businfo" ] && say "Mode menu deferred to after the driver reboot - your cards on the bus: $(cat "$TK/gpus.businfo")"; return 0; }
+  [ -n "${CTX_V:-}" ] || { . "$TK/plan.env" 2>/dev/null || return 0; }
   echo; echo "Pick ONE (you can switch any time later with:  llama-mode vision|plain )"
-  if [ "$PROFILE" = pending ] || [ -z "${CTX_V:-}" ]; then
-    echo "  NVIDIA GPU(s) detected - exact sizes are read once the driver installs (next step, one reboot)."
-    echo "  1) vision mode     - it can see images, if your cards can carry them"
-    echo "  2) text-only mode  - the deepest text session your pool allows"
-    read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
-  elif [ "$PROFILE" = 16g ]; then
+  if [ "$PROFILE" = 16g ]; then
     echo "  DETECTED: ${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" ) - the best fit for THIS machine:"
     echo "  1) VISION    + $(( CTX_V / 1024 ))K context - it can see images        [conversation memory: $KVC]"
     echo "  2) TEXT-ONLY + $(( CTX_P / 1024 ))K context - deeper sessions, no pics [conversation memory: $KVC]"
@@ -186,9 +188,9 @@ if [ ! -f "$MODE_FILE" ]; then
     fi
     ans=2
   fi
-  case "$ans" in 2*) MODE=plain;; *) MODE=vision;; esac
-  echo "$MODE" > "$MODE_FILE"
-else MODE=$(cat "$MODE_FILE"); fi
+}
+ask_mode
+MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
 if [ ! -f "$AGENT_FILE" ]; then
   echo; echo "What should sit on top of your new model?";
   echo "  1) Hermes Agent (chat terminal + tools + memory) - recommended";
@@ -243,7 +245,9 @@ if [ "$(cat "$HOME/.install-profile")" = pending ]; then
   say "GPU survey complete: ${NRIDE} card(s) riding $(tr ',' ':' < "$TK/gpus.txt" | paste -sd' ') = ${TOTALPOOL} MiB pool ; plan: vision ${CTX_V} / text ${CTX_P} ctx, KV ${KVC} $([ -s "$TK/gpus.junk" ] && echo "| sitting it out: $(tr ',' ' ' < "$TK/gpus.junk")")"
 fi
 PROFILE=$(cat "$HOME/.install-profile")
-. "$TK/plan.env" 2>/dev/null || true   # a multi-GPU box may serve the 196K alias; keep every stage reading the one plan
+. "$TK/plan.env" 2>/dev/null || true   # a multi-GPU box may serve the 192K alias; keep every stage reading the one plan
+ask_mode                                # deferred from a driverless first boot: NOW the menu can name the cards
+MODE=$(cat "$MODE_FILE" 2>/dev/null || echo vision)
 mark driver
 
 # ---------- STAGE 2: llama.cpp CUDA binaries (no compile) ----------
