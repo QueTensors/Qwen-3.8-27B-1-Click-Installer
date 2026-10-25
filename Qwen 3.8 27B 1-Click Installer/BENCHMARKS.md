@@ -22,6 +22,8 @@ Agent layer: cold 63 s / warm 26 s; cache proof 11.9 s -> 0.59 s.
 
 ## The laws that generalize (any card, any model size)
 1. **KV cost = ~23 MB per 1,000 context tokens** (q4_0 cache, measured linear to the MiB across both cards and four window sizes). Weights + KV + ~1.2 GB overhead = what you need. Plug in your card's VRAM and solve.
-2. **Generation age matters more than spec sheets:** the 3060 was ~35% faster than the 2060, well beyond the 7% bandwidth ratio — Ampere L2/kernel quality is a hidden tier. Capacity questions follow the table above; speed claims should keep a 30% generation margin.
+2. **Mixed pairs are a memory deal, not a speed deal.** When two cards share the work, everything runs at the slower card's pace — like two people carrying a couch. Our 2060+3060 box got the full 192K memory window, but answers at roughly 2060 speed. Two matched 3060s would answer ~35% faster (real measured, the spec sheets say under 10% — newer cards quietly beat their paper numbers) but give you nothing extra to grow into. Want a bigger brain? mix cards. Want a faster one? match them.
+
+   *For the nerds:* the gap is Ampere's cache and kernel scheduling, not raw bandwidth (7% on paper, 35% on the wall clock). Budget a generation's worth of margin into any mixed-pair speed claim before quoting it.
 3. **A 27B dense model at IQ2 fits a 12 GB card with a real 64K agent window** — the entry point for fully-local uncensored assistants is a ~$150 used GPU. Vision needs the 16 GB tier.
 4. MoE (35B-A3B class): runs on 2 GB VRAM but CPU-expert prefill (~23 t/s, DDR3 rig) makes agent-sized prompts impractical below large-RAM systems. Measure your prefill before trusting the VRAM number alone.
