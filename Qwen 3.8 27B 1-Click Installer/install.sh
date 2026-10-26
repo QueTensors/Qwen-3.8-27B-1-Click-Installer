@@ -134,6 +134,10 @@ if [ -s "$PASSF" ]; then
 else
   askpass || die "sudo authentication failed 3 times - re-run and type carefully"
 fi
+# askpass() keeps its PASS local; on a virgin box the branch above never assigned the global,
+# and SUDO() died on "PASS: unbound variable" at the driver stage (seen live on two cold boxes 10/26).
+# $PASSF exists after ANY success path, so load it unconditionally.
+PASS=$(cat "$PASSF")
 
 # ---------- version authority: the script you JUST downloaded always wins ----------
 # A fresh curl means a fresh product: if a previous install left state from a DIFFERENT
