@@ -15,11 +15,19 @@ Your own AI brain — uncensored or censored, your pick at install — running l
 
 Don't know your card? Open a terminal and type `nvidia-smi`. It'll print it. No output? The installer will detect your GPU and offer to install the driver — that's normal and included.
 
-## Where the model comes from
+## Where the model comes from (sources & credit)
 
-The brain this installs is **Qwen 3.8 27B** — an open-weights model from Alibaba, free to run and modify (Apache 2.0). The uncensored files come from **RentedNoodle's** community ablation work on Hugging Face (the "abliterated" lineage — the refusal behavior is surgically turned off, the knowledge is untouched); the censored alternative is **huihui-ai's** tuned build, and the vision projector comes from **ISTA-DASLab**. The engine underneath is **llama.cpp** (ggml-org), and the installer pulls its CUDA pieces from NVIDIA's official packages. Everything on your machine after install stays on your machine — we download from Hugging Face and PyPI once, then nothing phones home.
+We don't train models — we fetch them from the people who did the work and run them on your GPU. Every file the installer downloads, from these exact pages, no middleman:
 
-For the nerds: `Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored-MTP.gguf` (10.4 GB, IQ3_XXS + MTP drafter), mmproj BF16, llama.cpp b11829 CUDA builds pinned per release, nvidia-cublas/cuda-runtime wheels from PyPI, driver from the distro's NVIDIA package. Model pages: huggingface.co/RentedNoodle, huggingface.co/huihui-ai, huggingface.co/ISTA-DASLab — check their licenses; all MIT/Apache-family here.
+| What it is | Source | Exact file downloaded |
+|---|---|---|
+| **Big brain** (16 GB+ cards) — uncensored | [RentedNoodle — Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored](https://huggingface.co/RentedNoodle/Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored) | `Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored-MTP.gguf` (10.4 GB, IQ3_XXS + MTP drafter) |
+| **Vision projector** (16 GB cards, optional) | [ISTA-DASLab — Qwen3.8-27B-GSQ-RCO-GGUF](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF) | `mmproj-Qwen3.8-27B-BF16.gguf` |
+| **Compact brain** (12 GB and under) | [huihui-ai — Huihui-Qwen3.8-27B-abliterated-GGUF](https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF) | `Huihui-Qwen3.8-27B-abliterated-Swift-1.5-GSQ-RCO-IQ2_XS.gguf` |
+
+All three sit on top of the base **Qwen 3.8 27B** open-weights model from the [Qwen team at Alibaba](https://huggingface.co/Qwen) (Apache 2.0). The "uncensored" builds are community ablation work — the refusal behavior is surgically removed, the knowledge is untouched; the huihui-ai build doubles as the censored-style alternative lineage. The engine underneath is [llama.cpp](https://github.com/ggml-org/llama.cpp) (ggml-org), with prebuilt CUDA binaries pinned per release, plus NVIDIA's official cuBLAS/CUDA-runtime wheels from PyPI and the GPU driver from your distro's package.
+
+Weight licenses belong to their authors — check each page above (all MIT/Apache-family here); our installer script is MIT. Everything on your machine after install stays on your machine: we download from Hugging Face and PyPI once, then nothing phones home.
 
 ## Install
 
