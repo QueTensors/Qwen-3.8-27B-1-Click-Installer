@@ -15,6 +15,12 @@ Your own AI brain — uncensored or censored, your pick at install — running l
 
 Don't know your card? Open a terminal and type `nvidia-smi`. It'll print it. No output? The installer will detect your GPU and offer to install the driver — that's normal and included.
 
+## Where the model comes from
+
+The brain this installs is **Qwen 3.8 27B** — an open-weights model from Alibaba, free to run and modify (Apache 2.0). The uncensored files come from **RentedNoodle's** community ablation work on Hugging Face (the "abliterated" lineage — the refusal behavior is surgically turned off, the knowledge is untouched); the censored alternative is **huihui-ai's** tuned build, and the vision projector comes from **ISTA-DASLab**. The engine underneath is **llama.cpp** (ggml-org), and the installer pulls its CUDA pieces from NVIDIA's official packages. Everything on your machine after install stays on your machine — we download from Hugging Face and PyPI once, then nothing phones home.
+
+For the nerds: `Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored-MTP.gguf` (10.4 GB, IQ3_XXS + MTP drafter), mmproj BF16, llama.cpp b11829 CUDA builds pinned per release, nvidia-cublas/cuda-runtime wheels from PyPI, driver from the distro's NVIDIA package. Model pages: huggingface.co/RentedNoodle, huggingface.co/huihui-ai, huggingface.co/ISTA-DASLab — check their licenses; all MIT/Apache-family here.
+
 ## Install
 
 Open a terminal and paste this ONE line, then press Enter:
