@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9e-stylewording"
+VER="2.9f-pypiretry"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -343,7 +343,14 @@ if ! have cuda; then
   for W in nvidia-cublas-cu12 nvidia-cuda-runtime-cu12; do
     if ! ls "$CUDA_LIBS"/lib$( [ "$W" = nvidia-cublas-cu12 ] && echo cublas || echo cudart ).so.12 >/dev/null 2>&1; then
       say "fetching CUDA runtime from $W (one-time, ~850MB)"
-      U=$(curl -sf https://pypi.org/pypi/$W/json | python3 -c 'import json,sys; d=json.load(sys.stdin); us=[u["url"] for u in d["urls"] if "manylinux" in u["filename"] and "x86_64" in u["filename"]]; print(us[0])') || die "pypi lookup failed - re-run the same command"
+      U=""
+    for PT in 1 2 3; do
+      U=$(curl -sf -m 30 "https://pypi.org/pypi/$W/json" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); us=[u["url"] for u in d["urls"] if "manylinux" in u["filename"] and "x86_64" in u["filename"]]; print(us[0])' 2>/dev/null)
+      case "$U" in https://*whl) break;; esac
+      U=""
+      [ $PT -lt 3 ] && say "pypi answered junk for $W (try $PT/3) - waiting $((PT*10))s and retrying" && sleep $((PT*10))
+    done
+    [ -n "$U" ] || die "pypi lookup failed 3 times (transient outage likely) - re-run the same command"
       curl -fL --retry 3 -o "/tmp/$W.whl" "$U" || die "CUDA runtime download failed - re-run"
       python3 -m zipfile -e "/tmp/$W.whl" "/tmp/$W.x"
       find "/tmp/$W.x" \( -name "libcublas.so.12*" -o -name "libcublasLt.so.12*" -o -name "libcudart.so.12*" \) -exec cp -f {} "$CUDA_LIBS/" \;
