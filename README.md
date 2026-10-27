@@ -39,7 +39,7 @@ Open a terminal and paste this ONE line, then press Enter:
 curl -fsSL "https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh" | bash
 ```
 
-Not sure about piping a script into bash? **`Verify with Gemini Grok ChatGPT for No Malicious Code.txt`** is a verbatim copy of the exact script (with its SHA256) — paste it into any LLM and have it audited before you run. **`This is what this script does.txt`** is the plain-English manifest: every network call, every file written, nothing to hide behind. Nothing here asks for trust.
+Not sure about piping a script into bash? **`Malicious Code Check Online.txt`** is a verbatim copy of the exact script (with its SHA256) — paste it into any LLM and have it audited before you run. **`This is what this script does.txt`** is the plain-English manifest: every network call, every file written, nothing to hide behind. Nothing here asks for trust.
 
 It will ask you a few simple questions — every one has a safe default, so **you can press Enter through all of them** and get a great setup. On a fresh machine, the screen will say "REBOOTING NOW" and your terminal disconnects. That's normal! Just log back in within a couple of minutes and the install continues on-screen by itself.
 
