@@ -1,0 +1,57 @@
+HOW TO VERIFY THIS INSTALLER IS NOT MALICIOUS
+=============================================
+Paste everything below into Gemini (or ChatGPT/Claude/any LLM) and ask:
+"Does anything here phone home, upload my data, or hide a network call?"
+
+1) THE EXACT COMMAND A USER RUNS (the entire entry point, nothing else):
+
+curl -fsSL "https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh" | bash
+
+To read before running instead: open that URL in a browser, or:
+curl -fsSL "https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh" | less
+
+2) EVERY NETWORK CONTACT THE SCRIPT MAKES (complete list, host by host):
+
+  github.com (raw release downloads, HTTPS GET only):
+    https://github.com/ggml-org/llama.cpp/releases/download/<tag>/llama-<tag>-bin-ubuntu-cuda-<ver>-<arch>.tar.gz
+    https://github.com/ggml-org/llama.cpp/releases/download/<tag>/cudart-llama-<tag>-bin-ubuntu-cuda-<ver>-<arch>.tar.gz
+      (the CUDA toolkit llama.cpp officially ships; <tag> is pinned in the script)
+
+  huggingface.co (HTTPS GET only - the model weights, SHA256-verified after download):
+    https://huggingface.co/RentedNoodle/Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored/resolve/main/Qwen3.8-27B-GSQ-RCO-IQ3_XXS-Uncensored-MTP.gguf
+    https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF/resolve/main/mmproj-Qwen3.8-27B-BF16.gguf
+    https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/Huihui-Qwen3.8-27B-abliterated-Swift-1.5-GSQ-RCO-IQ2_XS.gguf
+
+  pypi.org (HTTPS GET of one JSON file per NVIDIA wheel, to find the official wheel URL):
+    https://pypi.org/pypi/nvidia-cublas-cu12/json
+    https://pypi.org/pypi/nvidia-cuda-runtime-cu12/json
+    then a GET of the *.whl URLs that JSON lists (files.pythonhosted.org).
+
+  hermes-agent.nousresearch.com (SECOND STAGE - only if you choose the agent layer):
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup
+      (Nous Research's own public installer, run with setup skipped; audit that
+       script separately the same way if you want - it is open, not ours.)
+
+  localhost only (health checks of your own new server; nothing leaves the machine):
+    http://127.0.0.1:1234/... (v1/models, health, one test chat completion)
+
+3) WHAT THE SCRIPT NEVER DOES
+  - No HTTP request ever SENDS data out (no POST/PUT of your files, no analytics,
+    no telemetry, no update pinger). Everything above is GET (download) only.
+  - No accounts, no API keys, no tokens; nothing to exfiltrate about you.
+  - No cron jobs, no systemd timers that call the network later; the only service
+    it leaves running is llama-server bound to your own LAN port 1234.
+  - sudo is used for: apt driver/toolkit installs and the systemd user service -
+    never hidden, the password prompt is validated interactively once.
+
+4) FILES IT WRITES (user-owned paths unless noted):
+    ~/models/                        the GGUF weights (SHA256-gated)
+    ~/.turnkey-llm* (state/lock/incomplete)  installer resume bookkeeping
+    ~/.config/systemd/user/llama-*.service   the server unit
+    ~/.local/bin/                    helper commands: endpoint, llama-mode, llama-style, install-status
+    /usr (via apt)                   the NVIDIA driver package from YOUR distro's repo
+
+5) WHAT THE INSTALLER DOES NOT CLAIM
+  The weights belong to their authors (see the model pages above and their own
+  licenses). This repo's own code is MIT. We are glue, not a service - after
+  install, pull the plug on your router and the model keeps answering.
