@@ -1,7 +1,7 @@
 # EXACT COPY of the script the one-liner downloads and runs:
 # https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh
 # Paste everything below into Gemini, Grok or ChatGPT and ask: is anything here malicious?
-# (sha256 of this exact file content: 0e31611c53d1ce48bcb499a7fe3417f054c7d747024f004afb546bff0c7750e1)
+# (sha256 of the script itself, everything below this header: 0e31611c53d1ce48bcb499a7fe3417f054c7d747024f004afb546bff0c7750e1)
 
 #!/usr/bin/env bash
 # turnkey-llm install.sh — bare Ubuntu -> local censored/uncensored Qwen3.8-27B + Hermes, one command.
