@@ -223,15 +223,9 @@ ask_mode(){
   [ -f "$MODE_FILE" ] && return 0
   [ "$PROFILE" = pending ] && { [ -s "$TK/gpus.businfo" ] && say "Mode menu deferred to after the driver reboot - your cards on the bus: $(cat "$TK/gpus.businfo")"; return 0; }
   [ -n "${CTX_V:-}" ] || { . "$TK/plan.env" 2>/dev/null || return 0; }
-  echo; echo "${BD}Pick ONE${C0} ${DM}(you can switch any time later with:  llama-mode vision|plain )${C0}"
-  if [ "$PROFILE" = 16g ]; then
-    echo "  ${CY}DETECTED:${C0} ${BD}${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM${C0}$( [ -s "$TK/gpus.junk" ] && echo "${DM} (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))${C0}" ) ${YL}- the best fit for THIS machine:${C0}"
-    echo "  ${GR}1)${C0} ${BD}VISION${C0}    + ${GR}$(( CTX_V / 1024 ))K${C0} context - it can see images        ${DM}[conversation memory: $KVC]${C0}"
-    echo "  ${GR}2)${C0} ${BD}TEXT-ONLY${C0} + ${GR}$(( CTX_P / 1024 ))K${C0} context - deeper sessions, no pics ${DM}[conversation memory: $KVC]${C0}"
-    read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
-  else
-    echo "  DETECTED: ${NRIDE:-1} usable NVIDIA card(s), ~$(( ( ${TOTALPOOL:-${TOTAL:-0}} + 512 ) / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" )."
-    echo "  This hardware has ONE optimal fit: the compact text brain at ${BESTK:-64}K context."
+  if [ "$PROFILE" != 16g ]; then
+    echo; echo "  DETECTED: ${NRIDE:-1} usable NVIDIA card(s), ~$(( ( ${TOTALPOOL:-${TOTAL:-0}} + 512 ) / 1024 )) GB pooled VRAM$( [ -s "$TK/gpus.junk" ] && echo " (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))" )."
+    echo "  This hardware has ONE optimal fit: the compact text brain at ${BESTK:-64}K context - no choice to make."
     if [ "$PROFILE" = 8g ]; then
       echo "  Honest note: the 8.0GB brain BARELY overflows one 8GB card - the overflow spills to system RAM,"
       echo "  so this tier runs at reading speed, not conversation speed. Adding ONE more card (even another 8)"
@@ -239,7 +233,14 @@ ask_mode(){
     else
       echo "  (Vision and the big model need a 16GB+ card pool - add cards later, re-run, it upgrades.)"
     fi
-    ans=2
+    MODE=plain; echo "$MODE" > "$MODE_FILE"; return 0
+  fi
+  echo; echo "${BD}Pick ONE${C0} ${DM}(you can switch any time later with:  llama-mode vision|plain )${C0}"
+  if [ "$PROFILE" = 16g ]; then
+    echo "  ${CY}DETECTED:${C0} ${BD}${NRIDE} usable NVIDIA card(s), ~$(( TOTALPOOL / 1024 )) GB pooled VRAM${C0}$( [ -s "$TK/gpus.junk" ] && echo "${DM} (weak cards sitting it out: $(tr ',' ':' < "$TK/gpus.junk"))${C0}" ) ${YL}- the best fit for THIS machine:${C0}"
+    echo "  ${GR}1)${C0} ${BD}VISION${C0}    + ${GR}$(( CTX_V / 1024 ))K${C0} context - it can see images        ${DM}[conversation memory: $KVC]${C0}"
+    echo "  ${GR}2)${C0} ${BD}TEXT-ONLY${C0} + ${GR}$(( CTX_P / 1024 ))K${C0} context - deeper sessions, no pics ${DM}[conversation memory: $KVC]${C0}"
+    read -rp " [1/2, Enter=1] " ans < /dev/tty || ans=1
   fi
   case "$ans" in 2*) MODE=plain;; *) MODE=vision;; esac
   echo "$MODE" > "$MODE_FILE"
@@ -250,19 +251,17 @@ ask_agent(){ # hardware-gated, so it also defers until the plan exists (same rul
   HERMES_OK=1
   [ "${PROFILE:-}" != 16g ] && HERMES_OK=0
   if [ "$HERMES_OK" = 1 ] && [ "${CTX_P:-0}" -lt 65536 ] && [ "${CTX_V:-0}" -lt 65536 ]; then HERMES_OK=0; fi
-  echo; echo "${BD}What should sit on top of your new model?${C0}"
   if [ "$HERMES_OK" = 1 ]; then
+    echo; echo "${BD}What should sit on top of your new model?${C0}"
     echo "  ${GR}1)${C0} Hermes Agent (chat terminal + tools + memory) ${DM}- recommended${C0}"
     echo "  ${GR}2)${C0} Raw endpoint only ${DM}(skip Hermes - use the OpenAI-compatible API directly)${C0}"
     read -rp " [1/2, Enter=1] " aa < /dev/tty || aa=1
     case "$aa" in 2*) AGENT=off;; *) AGENT=hermes;; esac
   else
-    echo "  ${DM}1) Hermes Agent - needs the big brain with 64K+ context; this machine's pool runs${C0}"
-    echo "  ${DM}   the compact model, so the agent would forget its own tool calls. Add a card${C0}"
-    echo "  ${DM}   (or a 16GB+) and re-run to unlock it.${C0}"
-    echo "  ${GR}2)${C0} Raw endpoint ${BD}(this box's right size)${C0} ${DM}- OpenAI-compatible API, point any app at it${C0}"
+    echo "  ${DM}Hermes Agent: locked on this hardware - it needs the big brain with 64K+ context, and${C0}"
+    echo "  ${DM}this pool runs the compact model, so the agent would forget its own tool calls. Add a${C0}"
+    echo "  ${DM}card (or a 16GB+ pool) and re-run to unlock it. Serving the${C0} ${BD}raw OpenAI-compatible endpoint${C0} ${DM}(this box's right size): point any app at it.${C0}"
     AGENT=off
-    echo "[installer] no question needed here: only one answer fits this box - chose ${BD}2) raw endpoint${C0} for you (re-run after adding a card to get the choice back)"
   fi
   echo "$AGENT" > "$AGENT_FILE"
 }
@@ -512,12 +511,12 @@ EOS
   chmod +x "$TK/install-status"
   ln -sf "$TK/install-status" "$HOME/.local/bin/install-status" 2>/dev/null || true
   echo "$ACTIVE" > "$HOME/.install-active"
-  # compact + AGENT=off: if a previous run left hermes pointed at a mode this box no longer
-  # serves (classic: vision alias on a box that shrank to one small card), re-point it to
-  # what IS served, else the agent wakes up talking to a dead alias.
-  if [ "$AGENT" != hermes ] && [ -f "$HOME/.hermes/config.yaml" ]; then
+  # A hermes install on this box must always end up pointed at a mode this box serves:
+  # compact boxes answer AGENT=off, but if an earlier bigger-plan run (or a manual setup)
+  # left hermes on a now-dead alias, the agent boots deaf. Re-point regardless of AGENT.
+  if [ -f "$HOME/.hermes/config.yaml" ]; then
     SERVED_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
-    if grep -qE "qwen38-27b-unc-(vision-96k|128k)" "$HOME/.hermes/config.yaml" 2>/dev/null; then
+    if grep -qE "qwen38-27b-unc-(vision-96k|128k)" "$HOME/.hermes/config.yaml" 2>/dev/null && ! grep -q "$SERVED_ALIAS" "$HOME/.hermes/config.yaml"; then
       sed -i -E "s/qwen38-27b-unc-(vision-96k|128k)/$SERVED_ALIAS/g" "$HOME/.hermes/config.yaml"
       say "re-pointed existing hermes config at $SERVED_ALIAS (the mode this box serves)"
     fi
