@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9l-honestalias"
+VER="2.9m-applyonchange"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -467,8 +467,9 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 EOS
+    cmp -s "/tmp/llama-$1.service" "$HOME/.config/systemd/user/llama-$1.service" || UNIT_CHANGED=1
     cp "/tmp/llama-$1.service" "$HOME/.config/systemd/user/"; }
-    mkdir -p "$HOME/.config/systemd/user"
+    mkdir -p "$HOME/.config/systemd/user"; UNIT_CHANGED=""
   if [ "$PROFILE" = 16g ]; then
     unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V" "--spec-type draft-mtp --spec-draft-n-max 8"
     unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P" "--spec-type draft-mtp --spec-draft-n-max 8"
@@ -529,7 +530,12 @@ EOS
     fi
   fi
   systemctl --user daemon-reload
-  systemctl --user enable --now "llama-$ACTIVE.service"
+  if systemctl --user is-active --quiet "llama-$ACTIVE.service" && [ "${UNIT_CHANGED:-}" = 1 ]; then
+    say "unit changed since last install - restarting the service so the new exec line takes effect"
+    systemctl --user restart "llama-$ACTIVE.service"
+  else
+    systemctl --user enable --now "llama-$ACTIVE.service"
+  fi
   loginctl enable-linger "$(id -un)" 2>/dev/null || true
   mark serve
 fi
