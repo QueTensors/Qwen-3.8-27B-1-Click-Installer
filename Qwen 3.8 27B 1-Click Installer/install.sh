@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9k-nofakemenu"
+VER="2.9l-honestalias"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -105,6 +105,12 @@ make_plan(){ # turn the survey into concrete tier numbers; writes $TK/plan.env (
     elif [ "$tot" -ge 26000 ] && [ "${KV_MODE:-auto}" != q4 ]; then KVC="q8_0"; fi
   fi
   NRIDE=$n; TOTALPOOL=$tot
+  # the alias must state the window actually served, not the flagship's number:
+  # compact boxes serve CTX12 (or 8K on the overflow tier), so name them 64k/8k.
+  if [ "${PROFILE:-}" != 16g ]; then
+    SERVE_CTX=$CTX12; [ "${PROFILE:-}" = 8g ] && SERVE_CTX=8192
+    ALIAS_P="qwen38-27b-unc-$(( SERVE_CTX / 1024 ))k"
+  fi
   { echo "CTX_V=$CTX_V"; echo "CTX_P=$CTX_P"; echo "CTX12=$CTX12"; echo "BESTK=$BESTK"; echo "KVC=$KVC"; echo "TOTALPOOL=$tot"; echo "NRIDE=$n"; echo "ALIAS_P=$ALIAS_P"; } > "$TK/plan.env"
   echo "$ALIAS_P" > "$TK/alias.ctx"
 }
@@ -514,10 +520,11 @@ EOS
   # A hermes install on this box must always end up pointed at a mode this box serves:
   # compact boxes answer AGENT=off, but if an earlier bigger-plan run (or a manual setup)
   # left hermes on a now-dead alias, the agent boots deaf. Re-point regardless of AGENT.
+  # Matches ANY historical alias (128k/192k/64k/vision-96k) so renames self-heal.
   if [ -f "$HOME/.hermes/config.yaml" ]; then
     SERVED_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
-    if grep -qE "qwen38-27b-unc-(vision-96k|128k)" "$HOME/.hermes/config.yaml" 2>/dev/null && ! grep -q "$SERVED_ALIAS" "$HOME/.hermes/config.yaml"; then
-      sed -i -E "s/qwen38-27b-unc-(vision-96k|128k)/$SERVED_ALIAS/g" "$HOME/.hermes/config.yaml"
+    if grep -qE "qwen38-27b-unc-[a-z0-9-]+" "$HOME/.hermes/config.yaml" 2>/dev/null && ! grep -q "$SERVED_ALIAS" "$HOME/.hermes/config.yaml"; then
+      sed -i -E "s/qwen38-27b-unc-[a-z0-9-]+/$SERVED_ALIAS/g" "$HOME/.hermes/config.yaml"
       say "re-pointed existing hermes config at $SERVED_ALIAS (the mode this box serves)"
     fi
   fi
