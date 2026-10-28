@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9m-applyonchange"
+VER="2.9n-bighold"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -461,7 +461,7 @@ After=network.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LIBDIR:$CUDA_LIBS
 $DEVENV
-ExecStart=$BIN -m $4 $mm $SHARD $SYSP $6 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
+ExecStart=$BIN -m $4 $mm $SHARD $SYSP $6 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 16384 --jinja -fa on
 Restart=on-failure
 RestartSec=5
 [Install]
