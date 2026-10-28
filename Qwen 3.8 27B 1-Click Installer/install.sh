@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9f-pypiretry"
+VER="2.9g-gpufingerprint"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -163,6 +163,27 @@ if ! flock -n 9; then
   kill $TAILPID 2>/dev/null; wait 2>/dev/null
   [ -f "$STATE" ] && grep -qx verify "$STATE" && { echo; echo "[installer] >>> install COMPLETE - run:  endpoint   for connection info."; sed -i '/turnkey-llm resume hook/,+1d' "$HOME/.bashrc" 2>/dev/null; }
   exit 0
+fi
+
+# ---------- hardware fingerprint: cards get sold, pulled, moved ----------
+# The preflight mark caches the GPU survey, so a box whose card set changed since the
+# first install re-ran blind: it trusted the saved plan, printed DONE, and left the
+# serve unit carrying a tensor-split half that no longer exists (seen live 10/27: a
+# 2-card box had one card sold; the re-run "completed instantly" while the server
+# crash-looped). Always scan live; if a HEALTHY scan disagrees with the saved roster
+# (card count or pool total), flush the survey and every stage that reads it.
+# Weights are SHA-gated and runtime artifacts stay, so re-planning costs seconds.
+if have preflight && [ -s "$TK/gpus.txt" ]; then
+  LIVEGPU=$(gpus 2>/dev/null)
+  if [ -n "$LIVEGPU" ]; then
+    NEWSIG=$(printf '%s\n' "$LIVEGPU" | awk -F, '{c++; s+=$2} END{print c":"s+0}')
+    OLDSIG=$(awk -F, '{c++; s+=$2} END{print c":"s+0}' "$TK/gpus.txt")
+    if [ "$NEWSIG" != "$OLDSIG" ]; then
+      say "hardware changed since last install (plan says ${OLDSIG%%:*} card(s) / ${OLDSIG##*:} MiB pool; live scan says ${NEWSIG%%:*} card(s) / ${NEWSIG##*:} MiB) - re-surveying and re-planning"
+      sed -i '/^\(preflight\|serve\|hermes\|verify\|endpoint\)$/d' "$STATE"
+      rm -f "$TK/gpus.txt" "$TK/gpus.junk" "$TK/gpus.businfo" "$TK/ctxdiv" "$TK/plan.env" "$TK/alias.ctx" "$HOME/.install-mode"
+    fi
+  fi
 fi
 
 # ---------- STAGE 0: preflight + hardware survey (runs BEFORE the menu, so the menu can talk about YOUR cards) ----------
