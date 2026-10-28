@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9h-smallfix"
+VER="2.9i-mtpgate"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -447,7 +447,7 @@ TPEOF
   else
     say "answer style: UNCENSORED - factory behavior, no filter prompt"
   fi
-  unit(){ # $1 suffix $2 ctx $3 mmproj-or-empty $4 alias
+  unit(){ # $1 suffix $2 ctx $3 mmproj-or-empty $4 model $5 alias $6 spec-flags (empty = model has no MTP layers; passing draft-mtp to a non-MTP quant aborts the server)
     local mm=""; [ -n "$3" ] && mm="--mmproj $3 --image-min-tokens 1024"
     cat > "/tmp/llama-$1.service" <<EOS
 [Unit]
@@ -456,7 +456,7 @@ After=network.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LIBDIR:$CUDA_LIBS
 $DEVENV
-ExecStart=$BIN -m $4 $mm $SHARD $SYSP --spec-type draft-mtp --spec-draft-n-max 8 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
+ExecStart=$BIN -m $4 $mm $SHARD $SYSP $6 --alias $5 --host 0.0.0.0 --port $PORT -ngl 99 -np 1 -c $2 --cache-type-k $KVC --cache-type-v $KVC -n 8192 --jinja -fa on
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -465,14 +465,13 @@ EOS
     cp "/tmp/llama-$1.service" "$HOME/.config/systemd/user/"; }
     mkdir -p "$HOME/.config/systemd/user"
   if [ "$PROFILE" = 16g ]; then
-    unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V"
-    unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P"
+    unit vision-96k "$CTX_V" "$M_MM" "$M_MODEL" "$ALIAS_V" "--spec-type draft-mtp --spec-draft-n-max 8"
+    unit plain-128k "$CTX_P" "" "$M_MODEL" "$ALIAS_P" "--spec-type draft-mtp --spec-draft-n-max 8"
     [ "$MODE" = vision ] && ACTIVE=vision-96k || ACTIVE=plain-128k
   else
-    [ "$NRIDE:-1" -gt 1 ] && [ "${TOTALPOOL:-0}" -lt 20000 ] && say "small-model tier on a ${TOTALPOOL} MiB pool: 32K context (64K needs ~20GB of cards)"
     case "$PROFILE" in
-      12g) unit plain "$CTX12" "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" ;;
-      *)   unit plain "8192"  "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" ;;
+      12g) unit plain "$CTX12" "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" "" ;;
+      *)   unit plain "8192"  "" "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$ALIAS_P" "" ;;
     esac
     ACTIVE=plain
   fi
