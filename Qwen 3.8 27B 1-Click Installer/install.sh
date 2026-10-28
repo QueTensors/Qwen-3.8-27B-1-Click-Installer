@@ -5,7 +5,7 @@
 # RESUMES ITSELF — via a login hook (you see it continue when you SSH back) and a boot
 # oneshot (finishes even if nobody returns). Safe to re-run any time: completed stages skip.
 set -u
-VER="2.9g-gpufingerprint"
+VER="2.9h-smallfix"
 INSTALL_URL="https://raw.githubusercontent.com/QueTensors/Qwen-3.8-27B-1-Click-Installer/main/Qwen%203.8%2027B%201-Click%20Installer/install.sh"
 # test hook: FORCE_PROFILE=12g ./install.sh  (pre-select a tier without that hardware)
 [ -n "${FORCE_PROFILE:-}" ] && echo "${FORCE_PROFILE}" > "$HOME/.install-profile"
@@ -21,6 +21,8 @@ M_MM_URL="https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF/resolve/ma
 M_MM_SHA="13cb7bebccbd04afc8f4090cb949ecf8937cdf7377c5799b1a0c594e7c0d3e16"
 M_MM_BYTES=931146528
 MODEL_SMALL_URL="https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/main/Huihui-Qwen3.8-27B-abliterated-Swift-1.5-GSQ-RCO-IQ2_XS.gguf"
+MODEL_SMALL_SHA="1401ac507622a2b685efcbb0e44a44cb725dee326094df805b0b2de00cceeb14"
+MODEL_SMALL_BYTES=8422841760
 PORT=1234; ALIAS_V="qwen38-27b-unc-vision-96k"; ALIAS_P="qwen38-27b-unc-128k"
 STATE="$HOME/.turnkey-llm.state"; PASSF="$HOME/.install-pass"
 LOG="$HOME/install.log"; export TK="$HOME/.turnkey-llm"
@@ -260,6 +262,7 @@ ask_agent(){ # hardware-gated, so it also defers until the plan exists (same rul
     echo "  ${DM}   (or a 16GB+) and re-run to unlock it.${C0}"
     echo "  ${GR}2)${C0} Raw endpoint ${BD}(this box's right size)${C0} ${DM}- OpenAI-compatible API, point any app at it${C0}"
     AGENT=off
+    echo "[installer] no question needed here: only one answer fits this box - chose ${BD}2) raw endpoint${C0} for you (re-run after adding a card to get the choice back)"
   fi
   echo "$AGENT" > "$AGENT_FILE"
 }
@@ -386,22 +389,22 @@ fi
   { LD_LIBRARY_PATH="$LIBDIR:$CUDA_LIBS" "$LIBDIR/llama-server" --list-devices 2>/dev/null | grep -qi cuda || die "CUDA backend cannot see the GPU - driver/fabric problem, not an installer problem"; }
 
 # ---------- STAGE 3: models (verify -> skip -> resume-download -> SHA256 gate) ----------
-fetch(){ # $1 path $2 url $3 sha $4 bytes ; direct-to-~/models, never the hf cache
+fetch(){ # $1 path $2 url $3 sha (or "skip") $4 bytes (or "0") ; direct-to-~/models, never the hf cache
   mkdir -p "$HOME/models"
-  if [ -f "$1" ] && [ "$(stat -c%s "$1")" = "$4" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$3" ]; then
+  if [ -f "$1" ] && { [ "$4" = "0" ] || [ "$(stat -c%s "$1")" = "$4" ]; } && { [ "$3" = "skip" ] || [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$3" ]; }; then
     say "$(basename "$1"): present, correct - skipping"; return 0; fi
-  say "downloading $(basename "$1") (~$(( $4 / 1073741824 )) GB, resumable - grab coffee)"
-  curl -fL -C - --retry 5 --retry-delay 5 -o "$1.part" "$2" || { rm -f "$1.part"; die "download interrupted - re-run the same command to resume"; }
+  say "downloading $(basename "$1") (~$(( ${4:-0} / 1073741824 )) GB, resumable - grab coffee)"
+  curl -fL -C - --retry 5 --retry-delay 5 -o "$1.part" "$2" || { rm -f "$1.part"; die "download interrupted - re-run the same command, it resumes"; }
   GOT=$(sha256sum "$1.part" | cut -d' ' -f1)
-  [ "$GOT" = "$3" ] || { mv "$1.part" "$1.corrupt-$GOT"; die "checksum mismatch (got $GOT) - file kept for inspection"; }
+  if [ "$3" != "skip" ] && [ "$GOT" != "$3" ]; then mv "$1.part" "$1.corrupt-$GOT"; die "checksum mismatch (got $GOT) - file kept for inspection"; fi
   mv "$1.part" "$1"; }
 if ! have models; then
   case "$PROFILE" in
     16g) fetch "$M_MM" "$M_MM_URL" "$M_MM_SHA" "$M_MM_BYTES"; fetch "$M_MODEL" "$M_MODEL_URL" "$M_MODEL_SHA" "$M_MODEL_BYTES" ;;   # projector always: llama-mode vision must work post-install
     12g) say "12G card: IQ2_XS brain (smaller, honest), text-only, 64K context"
-         fetch "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$MODEL_SMALL_URL" skip 0 ;;
+         fetch "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$MODEL_SMALL_URL" "$MODEL_SMALL_SHA" "$MODEL_SMALL_BYTES" ;;
     8g|small) say "profile $PROFILE: using the smaller IQ2_XS quant (fits 8GB; less context)"
-         fetch "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$MODEL_SMALL_URL" skip 0 ;;
+         fetch "$HOME/models/qwen38-27b-iq2xs-unc.gguf" "$MODEL_SMALL_URL" "$MODEL_SMALL_SHA" "$MODEL_SMALL_BYTES" ;;
   esac
   mark models
 fi
@@ -510,6 +513,16 @@ EOS
   chmod +x "$TK/install-status"
   ln -sf "$TK/install-status" "$HOME/.local/bin/install-status" 2>/dev/null || true
   echo "$ACTIVE" > "$HOME/.install-active"
+  # compact + AGENT=off: if a previous run left hermes pointed at a mode this box no longer
+  # serves (classic: vision alias on a box that shrank to one small card), re-point it to
+  # what IS served, else the agent wakes up talking to a dead alias.
+  if [ "$AGENT" != hermes ] && [ -f "$HOME/.hermes/config.yaml" ]; then
+    SERVED_ALIAS=$([ "$MODE" = vision ] && [ "$PROFILE" = 16g ] && echo "$ALIAS_V" || echo "$ALIAS_P")
+    if grep -qE "qwen38-27b-unc-(vision-96k|128k)" "$HOME/.hermes/config.yaml" 2>/dev/null; then
+      sed -i -E "s/qwen38-27b-unc-(vision-96k|128k)/$SERVED_ALIAS/g" "$HOME/.hermes/config.yaml"
+      say "re-pointed existing hermes config at $SERVED_ALIAS (the mode this box serves)"
+    fi
+  fi
   systemctl --user daemon-reload
   systemctl --user enable --now "llama-$ACTIVE.service"
   loginctl enable-linger "$(id -un)" 2>/dev/null || true
